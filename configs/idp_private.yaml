@@ -1,0 +1,16 @@
+idp:
+  client_id: private
+  issuer_url:
+    - https://oidctest.wsweet.org/
+
+  validation:
+    claims:
+      - aud
+      - iat
+      - exp
+      - sub
+    aud:
+      - private
+    exp:
+      min: 1m0s
+      max: 2h

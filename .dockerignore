@@ -1,0 +1,12 @@
+# .dockerignore
+
+.git
+.history
+.vscode
+*.bak
+*.swp
+.DS_Store
+
+private
+service/service
+test-client/test-client

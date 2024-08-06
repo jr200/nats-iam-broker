@@ -1,0 +1,18 @@
+nats:
+  url: '{{ env "NATS_URL" }}'
+
+service:
+  name: '{{ env "SERVICE_NAME" }}'
+  version: '{{ env "SERVICE_VERSION" }}'
+  description: '{{ env "SERVICE_DESC" }}'
+  creds_file: '{{ env "SERVICE_USER_CREDS" }}'
+
+  account:
+    name: '{{ env "NATS_ACCOUNT" }}'
+    signing_nkey: '{{ readFile "$SERVICE_ACCT_SIGNK" }}'
+    encryption:
+      enabled: true
+      xkey_secret: '{{ readNthLine 1 (env "SERVICE_ACCT_XK") }}'
+
+nats_jwt:
+  exp_max: 1h15m

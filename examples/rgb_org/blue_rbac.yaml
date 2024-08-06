@@ -1,0 +1,43 @@
+rbac:
+  user_accounts:
+    - name: APP1
+      public_key: '{{ readFile "$SECRET_STORE/APP1/acct-pubkey.pub" | trim }}'
+      signing_nkey: '{{ readFile "$SECRET_STORE/APP1/acct-signing-key.nk" }}'
+
+    - name: APP2
+      public_key: '{{ readFile "$SECRET_STORE/APP2/acct-pubkey.pub" | trim }}'
+      signing_nkey: '{{ readFile "$SECRET_STORE/APP2/acct-signing-key.nk" }}'
+
+    - name: APP3
+      public_key: '{{ readFile "$SECRET_STORE/APP3/acct-pubkey.pub" | trim }}'
+      signing_nkey: '{{ readFile "$SECRET_STORE/APP3/acct-signing-key.nk" }}'
+
+  role_binding:
+    - match: { claim: sub, value: msmith }
+      user_account: APP3
+      roles:
+        - can-pubsub-other
+
+    - match: { claim: aud, value: public }
+      user_account: APP3
+      roles:
+        - can-pubsub
+
+  roles:
+    - name: can-pubsub
+      permissions:
+        pub:
+          allow:
+            - blue.{{ strJoin .aud }}.{{ b64encode .sub }}
+        sub:
+          allow:
+            - blue.{{ strJoin .aud }}.{{ b64encode .sub }}
+
+    - name: can-pubsub-other
+      permissions:
+        pub:
+          allow:
+            - blue.{{ strJoin .aud }}.other
+        sub:
+          allow:
+            - blue.{{ strJoin .aud }}.other

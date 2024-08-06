@@ -1,0 +1,21 @@
+rbac:
+  user_accounts:
+    - name: APP30
+      public_key: '{{ readFile "$SECRET_STORE/APP30/acct-pubkey.pub" | trim }}'
+      signing_nkey: '{{ readFile "$SECRET_STORE/APP30/acct-signing-key.nk" }}'
+
+  role_binding:
+    - match: { claim: aud, value: public }
+      user_account: APP30
+      roles:
+        - can-pubsub
+
+  roles:
+    - name: can-pubsub
+      permissions:
+        pub:
+          allow:
+            - red.{{ strJoin .aud }}.{{ b64encode .sub }}
+        sub:
+          allow:
+            - red.{{ strJoin .aud }}.{{ b64encode .sub }}

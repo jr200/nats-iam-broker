@@ -11,15 +11,29 @@
 # Test binary, built with `go test -c`
 *.test
 
+# Application binaries
+service/service
+test-client/test-client
+
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
 # Dependency directories (remove the comment below to include it)
-# vendor/
+vendor/
 
 # Go workspace file
 go.work
 go.work.sum
 
-# env file
-.env
+# Mac OS X files
+.DS_Store
+
+# Project-local glide cache, RE: https://github.com/Masterminds/glide/issues/736
+.glide/
+
+# Other
+.history/
+
+private/
+build/
+dist/

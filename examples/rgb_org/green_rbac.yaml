@@ -1,0 +1,21 @@
+rbac:
+  user_accounts:
+    - name: APP7
+      public_key: '{{ readFile "$SECRET_STORE/APP7/acct-pubkey.pub" | trim }}'
+      signing_nkey: '{{ readFile "$SECRET_STORE/APP7/acct-signing-key.nk" }}'
+
+  role_binding:
+    - match: { claim: sub, value: rtyler }
+      user_account: APP7
+      roles:
+        - can-pubsub
+
+  roles:
+    - name: can-pubsub
+      permissions:
+        pub:
+          allow:
+            - green.{{ strJoin .aud }}.{{ .sub }}
+        sub:
+          allow:
+            - green.{{ strJoin .aud }}.{{ .sub }}
