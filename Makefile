@@ -97,7 +97,7 @@ example-shell: docker-build-example
 ################################################################################
 .PHONY: example-basic
 example-basic: docker-build-example
-	docker run --rm --entrypoint examples/basic/run.sh nats-iam-broker:debug -log-human -log=info
+	docker run --rm --entrypoint examples/basic/run.sh nats-iam-broker:debug -log-human -log=info -delim="{{,}}"
 
 ################################################################################
 # Target: example-rgb_org                                                      #

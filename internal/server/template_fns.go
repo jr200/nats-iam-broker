@@ -77,7 +77,7 @@ func strJoin(input []interface{}, separators ...string) string {
 	return strings.Join(strList, separator)
 }
 
-func renderAllTemplates(content string, mappings map[string]interface{}) string {
+func renderAllTemplates(content string, mappings map[string]interface{}, params ConfigParams) string {
 	re := regexp.MustCompile(`{{.*?}}`)
 
 	matches := re.FindAllStringIndex(content, -1)
@@ -88,7 +88,7 @@ func renderAllTemplates(content string, mappings map[string]interface{}) string 
 	for _, match := range matches {
 		start, end := match[0]+offset, match[1]+offset
 		originalMatch := result[start:end]
-		replacement := tryRenderTemplate(originalMatch, mappings)
+		replacement := tryRenderTemplate(originalMatch, mappings, params)
 		result = result[:start] + replacement + result[end:]
 
 		offset += len(replacement) - (end - start)
@@ -97,8 +97,8 @@ func renderAllTemplates(content string, mappings map[string]interface{}) string 
 	return result
 }
 
-func tryRenderTemplate(input string, context map[string]interface{}) string {
-	tmpl, err := template.New("config").Funcs(template.FuncMap{
+func tryRenderTemplate(input string, context map[string]interface{}, params ConfigParams) string {
+	tmpl, err := template.New("config").Delims(params.LeftDelim, params.RightDelim).Funcs(template.FuncMap{
 		"b64encode":   b64Encode,
 		"concat":      concat,
 		"expandEnv":   expandEnv,

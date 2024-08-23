@@ -11,21 +11,25 @@ import (
 )
 
 func main() {
-	configFiles := parseFlags()
+	configFiles, args := parseFlags()
 
-	if err := server.Start(configFiles); err != nil {
+	if err := server.Start(configFiles, args); err != nil {
 		fmt.Fprintf(os.Stderr, "[service stderr]: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func parseFlags() []string {
+func parseFlags() ([]string, server.ConfigParams) {
 	var logLevel string
 	var logHumanReadable bool
+	var delim string
 
 	flag.StringVar(&logLevel, "log", "info", "set log-level: disabled, panic, fatal, error, warn, info, debug, trace")
 	flag.BoolVar(&logHumanReadable, "log-human", false, "use human-readable logging output")
+	flag.StringVar(&delim, "delim", "{{,}}", "set delimiters in format 'left,right'")
 	flag.Parse()
+
+	leftDelim, rightDelim := server.ParseDelimiters(delim)
 
 	configs := flag.Args()
 	if len(configs) == 0 {
@@ -38,7 +42,12 @@ func parseFlags() []string {
 
 	configureLogging(logLevel, logHumanReadable)
 
-	return configs
+	args := server.ConfigParams{
+		LeftDelim:  leftDelim,
+		RightDelim: rightDelim,
+	}
+
+	return configs, args
 }
 
 func configureLogging(logLevel string, logHumanReadable bool) {

@@ -13,6 +13,11 @@ import (
 )
 
 // Struct definitions
+type ConfigParams struct {
+	LeftDelim  string
+	RightDelim string
+}
+
 type Config struct {
 	NATS    NATS    `yaml:"nats"`
 	Service Service `yaml:"service"`
@@ -91,7 +96,7 @@ func (v *NKey) UnmarshalText(text []byte) error {
 	return nil
 }
 
-func readConfigFiles(files []string, mappings map[string]interface{}) (*Config, error) {
+func readConfigFiles(files []string, mappings map[string]interface{}, params ConfigParams) (*Config, error) {
 
 	cfg := Config{
 		Idp: Idp{
@@ -112,7 +117,7 @@ func readConfigFiles(files []string, mappings map[string]interface{}) (*Config, 
 			return nil, fmt.Errorf("error reading file content: %v", err)
 		}
 
-		rendered := renderAllTemplates(string(raw), mappings)
+		rendered := renderAllTemplates(string(raw), mappings, params)
 		providerOptions = append(providerOptions, config.Source(strings.NewReader(rendered)))
 	}
 
