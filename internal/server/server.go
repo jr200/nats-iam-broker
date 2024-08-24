@@ -11,9 +11,9 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func Start(configFiles []string, params ConfigParams) error {
+func Start(configFiles []string) error {
 
-	config, err := readConfigFiles(configFiles, make(map[string]interface{}), params)
+	config, err := readConfigFiles(configFiles, make(map[string]interface{}))
 	if err != nil {
 		log.Err(err).Msg("bad configuration")
 		return err
@@ -53,7 +53,7 @@ func Start(configFiles []string, params ConfigParams) error {
 			log.Err(err).Msg("failed checks in idp validation")
 		}
 
-		cfgForRequest, err := readConfigFiles(configFiles, reqClaims.toMap(), params)
+		cfgForRequest, err := readConfigFiles(configFiles, reqClaims.toMap())
 		if err != nil {
 			log.Error().Err(err).Msg("error rendering config against idp-jwt")
 			return nil, nil, err

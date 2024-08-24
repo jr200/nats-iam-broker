@@ -1,3 +1,7 @@
+params:
+  left_delim: "{{"
+  right_delim: "}}"
+
 nats:
   url: '{{ env "NATS_URL" }}'
 
