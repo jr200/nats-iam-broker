@@ -78,7 +78,8 @@ func strJoin(input []interface{}, separators ...string) string {
 }
 
 func renderAllTemplates(content string, mappings map[string]interface{}, params ConfigParams) string {
-	re := regexp.MustCompile(`{{.*?}}`)
+	pattern := fmt.Sprintf(`%s.*?%s`, regexp.QuoteMeta(params.LeftDelim), regexp.QuoteMeta(params.RightDelim))
+	re := regexp.MustCompile(pattern)
 
 	matches := re.FindAllStringIndex(content, -1)
 
