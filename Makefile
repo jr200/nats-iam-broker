@@ -86,6 +86,53 @@ docker-build-example:
 		.
 
 ################################################################################
+# Target: helm chart dependencies
+################################################################################
+.PHONY: chart-deps
+chart-deps:
+	helm dependency build charts/nats-iam-broker --skip-refresh
+
+################################################################################
+# Target: helm chart install
+################################################################################
+.PHONY: chart-install
+chart-install: chart-deps
+	helm uninstall nats-iam-broker || echo "OK"
+	helm install nats-iam-broker charts/nats-iam-broker \
+		--set vault-actions.bootstrapToken=$(VAULT_TOKEN) \
+		-f charts/nats-iam-broker/values.yaml
+
+################################################################################
+# Target: helm chart upgrade
+################################################################################
+.PHONY: chart-upgrade
+chart-upgrade: chart-deps
+	helm upgrade nats-iam-broker charts/nats-iam-broker \
+		-f charts/nats-iam-broker/values.yaml
+
+################################################################################
+# Target: helm template
+################################################################################
+.PHONY: chart-template
+chart-template: chart-deps
+	helm template nats-iam-broker charts/nats-iam-broker \
+		--set vault-actions.bootstrapToken=$(VAULT_TOKEN) \
+		-f charts/nats-iam-broker/values.yaml
+
+################################################################################
+# Target: helm template
+################################################################################
+.PHONY: chart-dry-run
+chart-dry-run:
+	helm install \
+		-f charts/nats-iam-broker/values.yaml \
+		--generate-name \
+		--dry-run \
+		--debug \
+		--set vault-actions.bootstrapToken=$(VAULT_TOKEN) \
+		charts/nats-iam-broker
+
+################################################################################
 # Target: example-shell                                                        #
 ################################################################################
 .PHONY: example-shell

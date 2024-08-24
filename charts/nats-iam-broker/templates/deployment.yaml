@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nats-iam-broker.fullname" . }}
+  labels:
+    {{- include "nats-iam-broker.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "nats-iam-broker.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.vault.enabled }}
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-configmap: {{ include "nats-iam-broker.fullname" . }}-vault-agent
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/agent-init-first: "true"
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "nats-iam-broker.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "nats-iam-broker.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.devDebug }}
+          command: 
+            - sleep
+          args:
+          - infinity
+          {{- else }}
+          command:
+          - /usr/local/bin/nats-iam-broker
+          args:
+            - -log={{ .Values.logging.level }}
+{{- if not .Values.logging.json }}
+            - -log-human
+{{- end }}
+            - /config/app.yaml
+            - /config/idp.yaml
+            - /config/rbac-accounts.yaml
+            - /config/rbac-roles.yaml
+            - /config/rbac-bindings.yaml
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: volume-config-app
+              mountPath: /config/app.yaml
+              subPath: app.yaml
+              readOnly: true
+            - name: volume-config-idp
+              mountPath: /config/idp.yaml
+              subPath: idp.yaml
+              readOnly: true
+            - name: volume-config-rbac-accounts
+              mountPath: /config/rbac-accounts.yaml
+              subPath: rbac-accounts.yaml
+              readOnly: true
+            - name: volume-config-rbac-roles
+              mountPath: /config/rbac-roles.yaml
+              subPath: rbac-roles.yaml
+              readOnly: true
+            - name: volume-config-rbac-bindings
+              mountPath: /config/rbac-bindings.yaml
+              subPath: rbac-bindings.yaml
+              readOnly: true
+            {{- if .Values.volumeMounts }}
+            {{ toYaml .Values.volumeMounts | indent 12 }}
+            {{- end }}
+      volumes:
+        - name: volume-config-app
+          configMap:
+            name: {{ include "nats-iam-broker.fullname" . }}-app
+        - name: volume-config-idp
+          configMap:
+            name: {{ include "nats-iam-broker.fullname" . }}-idp
+        - name: volume-config-rbac-accounts
+          configMap:
+            name: {{ include "nats-iam-broker.fullname" . }}-rbac-accounts
+        - name: volume-config-rbac-roles
+          configMap:
+            name: {{ include "nats-iam-broker.fullname" . }}-rbac-roles
+        - name: volume-config-rbac-bindings
+          configMap:
+            name: {{ include "nats-iam-broker.fullname" . }}-rbac-bindings
+        {{- if .Values.volumes }}
+        {{ toYaml .Values.volumes | indent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

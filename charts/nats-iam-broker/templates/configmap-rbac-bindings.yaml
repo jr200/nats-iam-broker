@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nats-iam-broker.fullname" . }}-rbac-bindings
+  labels: {{- include "nats-iam-broker.labels" . | nindent 4 }}
+data:
+  rbac-bindings.yaml: |
+    rbac:
+      role_binding:
+      {{- with .Values.config.rbac.bindings }}
+      {{- toYaml . | nindent 6 }}
+      {{- end}}
