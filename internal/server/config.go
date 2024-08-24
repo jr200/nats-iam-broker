@@ -12,11 +12,12 @@ import (
 	"github.com/nats-io/nkeys"
 	"github.com/rs/zerolog/log"
 	"go.uber.org/config"
+	"gopkg.in/yaml.v2"
 )
 
 // Struct definitions
 type Config struct {
-	AppParams ConfigParams `yaml:"params" validate:"required"`
+	AppParams ConfigParams `yaml:"params"`
 	NATS      NATS         `yaml:"nats" validate:"required"`
 	Service   Service      `yaml:"service" validate:"required"`
 	Idp       Idp          `yaml:"idp" validate:"required"`
@@ -84,7 +85,9 @@ type NKey struct {
 func (v *Duration) UnmarshalText(text []byte) error {
 	d, err := time.ParseDuration(string(text))
 	if err != nil {
-		return err
+		// possibly templated
+		log.Debug().Msgf("failed to parse duration from '%s' (%v)", string(text), err)
+		return nil
 	}
 	v.Duration = d
 	return nil
@@ -93,14 +96,56 @@ func (v *Duration) UnmarshalText(text []byte) error {
 func (v *NKey) UnmarshalText(text []byte) error {
 	nkey, err := nkeys.FromSeed([]byte(text))
 	if err != nil {
-		return err
+		// possibly templated
+		log.Debug().Msgf("skipped parsing nkey: %v (%v)", string(text), err)
+		return nil
 	}
 	v.KeyPair = nkey
 	return nil
 }
 
+func mergeConfigurationFiles(files []string) (string, error) {
+
+	var providerOptions []config.YAMLOption
+
+	for _, filePath := range files {
+		log.Debug().Msgf("merging config %s", filePath)
+		raw, err := os.ReadFile(filePath)
+		if err != nil {
+			return "", fmt.Errorf("error reading file content: %v", err)
+		}
+
+		providerOptions = append(providerOptions, config.Source(strings.NewReader(string(raw))))
+	}
+
+	provider, err := config.NewYAML(providerOptions...)
+	if err != nil {
+		return "", fmt.Errorf("error creating YAML provider: %v", err)
+	}
+
+	var mergedMap map[string]interface{}
+	if err := provider.Get(config.Root).Populate(&mergedMap); err != nil {
+		return "", fmt.Errorf("error populating merged config map: %v", err)
+	}
+
+	mergedYAML, err := yaml.Marshal(mergedMap)
+	if err != nil {
+		return "", fmt.Errorf("error marshalling merged config to YAML: %v", err)
+	}
+
+	return string(mergedYAML), nil
+}
+
 func readConfigFiles(files []string, mappings map[string]interface{}) (*Config, error) {
 
+	mergedYAML, err := mergeConfigurationFiles(files)
+	if err != nil {
+		return nil, err
+	}
+
+	// log.Trace().Msgf("Merged Yaml: \n%s", mergedYAML)
+
+	// Initialize a default configuration with default AppParams
 	cfg := Config{
 		AppParams: ConfigParams{
 			LeftDelim:  "{{",
@@ -116,33 +161,27 @@ func readConfigFiles(files []string, mappings map[string]interface{}) (*Config, 
 		},
 	}
 
-	var providerOptions []config.YAMLOption
-	for _, filePath := range files {
-		log.Debug().Msgf("loading config %s", filePath)
-		raw, err := os.ReadFile(filePath)
-		if err != nil {
-			return nil, fmt.Errorf("error reading file content: %v", err)
-		}
-
-		rendered := renderAllTemplates(string(raw), mappings, cfg.AppParams)
-		providerOptions = append(providerOptions, config.Source(strings.NewReader(rendered)))
+	if err := yaml.Unmarshal([]byte(mergedYAML), &cfg); err != nil {
+		return nil, fmt.Errorf("error unmarshalling merged YAML into Config: %v", err)
 	}
 
-	provider, err := config.NewYAML(providerOptions...)
+	renderedYAML := renderAllTemplates(string(mergedYAML), mappings, cfg.AppParams)
+
+	// log.Trace().Msgf("Rendered Yaml: \n%s", renderedYAML)
+
+	renderedProvider, err := config.NewYAML(config.Source(strings.NewReader(renderedYAML)))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error creating YAML provider from rendered content: %v", err)
 	}
 
-	err = provider.Get(config.Root).Populate(&cfg)
+	err = renderedProvider.Get(config.Root).Populate(&cfg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error populating config: %v", err)
 	}
 
 	if cfg.Service.Name == "" {
 		return nil, fmt.Errorf("missing configuration value service.name")
 	}
-
-	// log.Trace().Msgf("cfg: %v", string(IgnoreError(yaml.Marshal(cfg))))
 
 	validate := validator.New()
 	validate.RegisterValidation("semver", validateSemVer)
