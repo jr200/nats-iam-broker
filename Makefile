@@ -98,16 +98,9 @@ chart-deps:
 .PHONY: chart-install
 chart-install: chart-deps
 	helm uninstall nats-iam-broker || echo "OK"
-	helm install nats-iam-broker charts/nats-iam-broker \
-		--set vault-actions.bootstrapToken=$(VAULT_TOKEN) \
-		-f charts/nats-iam-broker/values.yaml
-
-################################################################################
-# Target: helm chart upgrade
-################################################################################
-.PHONY: chart-upgrade
-chart-upgrade: chart-deps
 	helm upgrade nats-iam-broker charts/nats-iam-broker \
+		--install \
+		--set vault-actions.bootstrapToken=$(VAULT_TOKEN) \
 		-f charts/nats-iam-broker/values.yaml
 
 ################################################################################
