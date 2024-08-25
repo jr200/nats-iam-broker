@@ -3,7 +3,7 @@ name: create-release
 on:
   repository_dispatch:
     types:
-      - build-image-success
+      - build-chart-success
 
 jobs:
   build:

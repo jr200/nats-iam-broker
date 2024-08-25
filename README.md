@@ -106,7 +106,10 @@ As in the previous example, authorised NATS users are created and signed on-the-
 
 ## Setup
 
-The application is intended to be deployed as a single golang binary plus a (mergable set of) YAML configuration file(s).
+The application is intended to be deployed as either:
+
+- a single golang binary plus a (mergable set of) YAML configuration file(s).
+- a helm-chart, see [charts/nats-iam-broker/README.md](https://github.com/jr200/nats-iam-broker/tree/main/charts/nats-iam-broker/README.md).
 
 Standard go templating is used to construct roles dynamically. Templating functions are listed in the `filters` module.
 

@@ -1,0 +1,278 @@
+# Default values for nats-iam-broker.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Enable or disable debug mode for development
+devDebug: false
+
+# Number of replicas for the deployment
+replicaCount: 1
+
+image:
+  #  The Docker image repository
+  repository: ghcr.io/jr200/nats-iam-broker
+  # The image pull policy (Always, IfNotPresent, Never)
+  pullPolicy: Always
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+# Override the default name of the chart
+nameOverride: ""
+# Override the full name of the chart
+fullnameOverride: ""
+
+logging:
+  json: false # Set to true to enable JSON logging
+  level: info # Set logging level: error, warn, info, debug, trace
+
+config:
+  params:
+    # The left delimiter for template parsing
+    left_delim: "<<<"
+    # The right delimiter for template parsing
+    right_delim: ">>>"
+
+  app:
+    # The name of the NATS microservice
+    name: my-nats-iam-broker
+    # A description for the NATS microservice
+    description: my-nats-iam-broker auth-callout
+
+    nats:
+      # URL of the NATS server
+      url: nats.nats.svc:4222
+      # expiration duration of granted NATS user JWTs
+      jwtExpiry: 1h15m
+
+    natsMicroService:
+      # Path to the NATS user credentials file - this is the user the nats-iam-broker runs as
+      userCredsFile: /vault/secrets/iam-broker/u-minter.creds
+
+      # configuration for the account running the nats-iam-broker microservice
+      account:
+        # The name of the decentralised NATS account
+        name: MINT
+        # signing key for the NATS account
+        signingNkey:
+          type: file # The type of key storage (raw, env, file)
+          value: /vault/secrets/iam-broker/a-signer.nk
+
+      # configure encryption between the NATS server and the nats-iam-broker microservice
+      encryption:
+        enabled: true
+        # private encryption xkey used to secure communication
+        xkeySecret:
+          type: file # The type of key storage (raw, env, file)
+          value: /vault/secrets/service/xkey.nk
+
+  # configuration of the third-party identity provider that supplied the JWT token
+  idp:
+    # The client ID for the identity provider
+    client_id: public
+
+    # URLs of the identity provider issuer
+    issuer_url:
+      - https://oidctest.wsweet.org/
+
+    validation:
+      # claims required to be present on the incoming JWT validation
+      claims:
+        - aud
+        - iat
+        - exp
+        - sub
+      # Expected values for the audience claim of the JWT
+      # to skip this check set it to []
+      aud:
+        - public
+      # acceptable expiration bounds for incoming JWT
+      exp:
+        min: 1m0s
+        max: 2h
+
+  # role-based access control configuration section
+  rbac:
+    # configuration of decentralised accounts that can sign newly minted
+    # NATS user JWTs
+    accounts:
+      []
+      # - name: my-app
+      #   publicKey:
+      #     type: file # The type of key storage (raw, env, file)
+      #     value: /vault/secrets/rbac/my-app/a-identity.pub
+      #   signingNkey:
+      #     type: file # The type of key storage (raw, env, file)
+      #     value: /vault/secrets/rbac/my-app/a-sign.nk
+
+    # configuration of roles (groups of permissions + limits) that can be attached to
+    # minted NATS user JWTs
+    roles:
+      []
+      # - name: streaming
+      #   permissions:
+      #     sub:
+      #       allow:
+      #         - "$JS.API.>"
+      #         - "_INBOX.>"
+      #     pub:
+      #       allow:
+      #         - "$JS.API.STREAM.CREATE.basic_test_stream"
+      #         - "$JS.API.STREAM.UPDATE.basic_test_stream"
+      #         - "$JS.API.CONSUMER.CREATE.basic_test_stream.basic_test_stream"
+      #         - "$JS.API.CONSUMER.MSG.NEXT.basic_test_stream.basic_test_stream"
+      #     resp:
+      #       max: 1
+      #       ttl: 1h
+
+      #   limits:
+      #     data: 65536
+
+    # configuration to associate RBAC roles to RBAC accounts
+    bindings:
+      []
+      # - match: { claim: aud, value: public }
+      #   user_account: APP1
+      #   roles:
+      #     - streaming
+
+# service account of the nats-iam-broker pod
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use. If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# Additional annotations to add to the pods
+podAnnotations: {}
+# Additional labels to add to the pods
+podLabels: {}
+
+# Define security context for the pod
+podSecurityContext:
+  {}
+  # fsGroup: 2000
+
+# Define security context for the container
+securityContext:
+  {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+# Resource requests and limits for the container
+resources:
+  {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# Additional volumes on the output Deployment definition.
+volumes: []
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts: []
+
+# Node selector for pod scheduling
+nodeSelector: {}
+
+# Tolerations for pod scheduling
+tolerations: []
+
+# Affinity rules for pod scheduling
+affinity: {}
+
+vault:
+  # Enable or disable Vault-Agent Sidecar Injector
+  enabled: false
+
+  # The URL of the Vault server
+  url: http://vault.vault.svc
+  # The vault role to assume for the vault-agent init container
+  brokerRole: my-nats-iam-broker-role
+
+  # The Vault kubernetes authentication mount path
+  authMount: auth/kubernetes
+
+  # Path to the xkey secret in Vault
+  xkeySecret: kv/data/nats/xkey/operator/my-op/account/my-acct
+
+  # Path to the mint signing key in Vault
+  mintSigningNKey: nats/nkey/operator/my-op/account/my-acct/signing/my-acct-ask1
+
+  # Path to the mint user credentials in Vault
+  mintUserCreds: nats/creds/operator/my-op/account/my-acct/user/my-acct-user
+
+  # List of additional RBAC account credentials to fetch from Vault
+  rbacCredentials:
+    - name: APP1
+      accountPubKey: nats/nkey/operator/my-op/account/app1
+      signingNkey: nats/nkey/operator/my-op/account/app1/signing/app1-ask1
+
+# vault-actions subchart used to create a policy that grants the Vault-Agent Sidecar
+# Injector permissions to the paths listed in the .Values.vault section.
+# note: this chart automatically infers and constructs the required policy.
+# see: https://github.com/jr200/vault-actions
+vault-actions:
+  # Enable or disable Vault actions
+  enabled: false
+  # Enable or disable debug mode for Vault actions
+  devDebug: false
+
+  hookConfiguration:
+    # The hook phase for Vault actions
+    hook: pre-install
+    # The weight for hook ordering
+    hookWeight: -5
+    # The delete policy for the hook
+    hookDeletePolicy: before-hook-creation,hook-succeeded
+
+  # The bootstrap token for Vault actions
+  # this can either be a regular token with a superset of the required policies
+  # or a minimal policy generated by the vault-actions component.
+  #
+  # To obtain instructions to build the minimal token, run this chart with a null
+  # or invalid token, and observe the output of the failed vault-actions pod.
+  bootstrapToken: ~
+
+  # The name of the secret for vault-actions bootstrap
+  secretName: va-bootstrap-secret
+
+  # the name of the created policy, used by the vault-agent sidecar injector
+  policyName: my-nats-iam-broker-policy
+
+  config:
+    bootstrap:
+      # Clean up the bootstrap policy after installation
+      cleanup_after_install: true
+      params:
+        # Display name for the bootstrap
+        display-name: nats-bootstrap
+        # Maximum TTL for the bootstrap token
+        explicit-max-ttl: 5m
+        # Whether the bootstrap token is renewable
+        renewable: false
+        # The TTL for the one-time use wrapping tokens
+        wrap-ttl: 60s
+        # The format for displaying secrets
+        format: table
+        # The field to use for wrapping tokens
+        field: wrapping_token
+
+    # Additional actions to perform during vault-actions bootstrap
+    # (probably not needed)
+    additionalActions: []
