@@ -104,6 +104,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          file: docker/Dockerfile
           context: .
           provenance: false
           # tags: ${{ steps.meta.outputs.tags }}

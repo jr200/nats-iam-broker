@@ -43,9 +43,16 @@ OUT_DIR := ./dist
 
 .DEFAULT_GOAL := all
 
+ifneq ($(wildcard ./private/charts/nats-iam-broker),)
+VALUES_PATH := ./private/charts/nats-iam-broker/values.yaml
+else
+VALUES_PATH := ./charts/nats-iam-broker/values.yaml
+endif
+
+
 DOCKER_REGISTRY ?= ghcr.io/jr200
 IMAGE_NAME ?= nats-iam-broker
-
+K8S_NAMESPACE ?= nats-iam-broker
 
 ################################################################################
 # Target: all                                                                  #
@@ -75,12 +82,13 @@ build:
 
 
 ################################################################################
-# Target: docker-build-example                                                 #
+# Target: docker-build                                                 #
 ################################################################################
-.PHONY: docker-build-example
-docker-build-example:
-	docker build \
-		-f Dockerfile \
+.PHONY: docker-build
+docker-build:
+	podman build \
+	    --layers \
+		-f docker/Dockerfile.example \
 		--build-arg GOOS=linux --build-arg GOARCH=amd64 \
 		-t nats-iam-broker:debug \
 		.
@@ -91,26 +99,26 @@ docker-build-example:
 .PHONY: chart-deps
 chart-deps:
 	helm dependency build charts/nats-iam-broker --skip-refresh
+	kubectl create namespace $(K8S_NAMESPACE) || echo "OK"
 
 ################################################################################
 # Target: helm chart install
 ################################################################################
 .PHONY: chart-install
 chart-install: chart-deps
-	helm uninstall nats-iam-broker || echo "OK"
-	helm upgrade nats-iam-broker charts/nats-iam-broker \
+	helm upgrade -n $(K8S_NAMESPACE)  nats-iam-broker charts/nats-iam-broker \
 		--install \
 		--set vault-actions.bootstrapToken=$(VAULT_TOKEN) \
-		-f charts/nats-iam-broker/values.yaml
+		-f $(VALUES_PATH)
 
 ################################################################################
 # Target: helm template
 ################################################################################
 .PHONY: chart-template
 chart-template: chart-deps
-	helm template nats-iam-broker charts/nats-iam-broker \
+	helm template -n $(K8S_NAMESPACE)  nats-iam-broker charts/nats-iam-broker \
 		--set vault-actions.bootstrapToken=$(VAULT_TOKEN) \
-		-f charts/nats-iam-broker/values.yaml
+		-f $(VALUES_PATH)
 
 ################################################################################
 # Target: helm template
@@ -118,7 +126,8 @@ chart-template: chart-deps
 .PHONY: chart-dry-run
 chart-dry-run:
 	helm install \
-		-f charts/nats-iam-broker/values.yaml \
+		-n $(K8S_NAMESPACE) 
+		-f $(VALUES_PATH) \
 		--generate-name \
 		--dry-run \
 		--debug \
@@ -129,19 +138,19 @@ chart-dry-run:
 # Target: example-shell                                                        #
 ################################################################################
 .PHONY: example-shell
-example-shell: docker-build-example
+example-shell: docker-build
 	docker run --rm -it --entrypoint bash nats-iam-broker:debug
 
 ################################################################################
 # Target: example-basic                                                        #
 ################################################################################
 .PHONY: example-basic
-example-basic: docker-build-example
+example-basic: docker-build
 	docker run --rm --entrypoint examples/basic/run.sh nats-iam-broker:debug -log-human -log=info
 
 ################################################################################
 # Target: example-rgb_org                                                      #
 ################################################################################
 .PHONY: example-rgb_org
-example-rgb_org: docker-build-example
+example-rgb_org: docker-build
 	docker run --rm --entrypoint examples/rgb_org/run.sh nats-iam-broker:debug -log-human -log=info
