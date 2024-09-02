@@ -61,12 +61,27 @@ function create_user_nobody() {
 	echo ${json_payload} | $VAULT_CMD write nats/issue/operator/${operator}/account/${account}/user/nobody -
 }
 
+function create_user_god() {
+  local operator=$1
+  local account=$2
+
+  template_file="${SCRIPT_DIR}/templates/user.json.j2"
+
+  json_payload=`render_jq_template ${template_file} \
+    ".useSigningKey=${account}-ask1" \
+    '.claims.name=god' \
+    ".claims.user.pub.allow=[\">\"]" \
+    ".claims.user.sub.allow=[\">\"]" \
+    `
+	echo ${json_payload} | $VAULT_CMD write nats/issue/operator/${operator}/account/${account}/user/god -
+}
+
 function read_account_pubkey() {
   local operator=$1
   local account=$2
 
   account_pubkey=`$VAULT_CMD read -format=table -field=publicKey "nats/nkey/operator/${operator}/account/${account}"`
-  echo ${account_pubkey}
+  echo "${account_pubkey}"
 }
 
 function read_account_signing_key() {
@@ -74,7 +89,7 @@ function read_account_signing_key() {
   local account=$2
 
   account_signing_key=`$VAULT_CMD read -format=table -field=seed "nats/nkey/operator/${operator}/account/${account}"`
-  echo ${account_signing_key}
+  echo "${account_signing_key}"
 }
 
 function read_user_pubkey() {
@@ -83,7 +98,7 @@ function read_user_pubkey() {
   local user=$3
 
   user_pubkey=`$VAULT_CMD read -format=table -field=publicKey "nats/nkey/operator/${operator}/account/${account}/user/${user}"`
-  echo ${user_pubkey}
+  echo "${user_pubkey}"
 }
 
 function read_user_creds() {
@@ -91,9 +106,32 @@ function read_user_creds() {
   local account=$2
   local user=$3
 
-  user_creds=`$VAULT_CMD read -format=table -field=creds "nats/creds/operator/${operator}/account/${account}/user/${user}"`
-  echo ${user_creds}
+  local user_creds=`$VAULT_CMD read -format=table -field=creds "nats/creds/operator/${operator}/account/${account}/user/${user}"`
+  echo "${user_creds}"
 }
+
+function save_nats_context() {
+  local operator=$1
+  local account=$2
+  local user=$3
+  shift 3 # Shift the positional parameters to the left, so $@ will contain the rest
+
+  local path=${NATS_CREDS_STORE:-~/.nats}
+  mkdir -p "${path}"
+
+  creds=`read_user_creds "${operator}" "${account}" "${user}"`
+  echo "${creds}" > ${path}/u-${account}-${user}.creds
+
+  save_name=$(echo "vault-nats_${account}_${user}" | awk '{print tolower($0)}')
+
+  # Pass all additional arguments using "$@"
+  # hint: useful for passing --server flag
+  nats context save "${save_name}" \
+      --creds="${path}/u-${account}-${user}.creds" \
+      --description "vault-nats: ${operator}/${account}/${user}" \
+      "$@"
+}
+
 
 function create_plain_account() {
   local operator=$1
