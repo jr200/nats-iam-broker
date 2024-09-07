@@ -1,0 +1,29 @@
+name: publish-release
+
+on:
+  repository_dispatch:
+    types:
+      - dispatch-publish-release
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "release-version"
+        required: true
+        type: string
+        default: v0.1.0
+
+jobs:
+  configure:
+    uses: jr200/github-action-templates/.github/workflows/preconfigure.yml@main
+    with:
+      event_name: ${{ toJson(github.event_name) }}
+      event: ${{ toJson(github.event) }}
+
+  main:
+    needs: configure
+    uses: jr200/github-action-templates/.github/workflows/publish_release.yml@main
+    with:
+      tag: ${{ fromJson(needs.configure.outputs.context).tag }}
+    secrets:
+      token: ${{ secrets.GITHUB_TOKEN }}

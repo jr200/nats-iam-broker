@@ -1,0 +1,27 @@
+name: begin-release-flow
+
+on:
+  push:
+    tags:
+      - v*.*.*
+
+jobs:
+  spawn-workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+      - name: dispatch-next-workflow
+        uses: peter-evans/repository-dispatch@v3
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          event-type: dispatch-build-docker-image
+          client-payload: |-
+            {
+              "ref": "${{ github.ref }}",
+              "sha": "${{ github.sha }}",
+              "tag": "${{ env.TAG }}",
+              "chart_repo": "jr200/helm-charts",
+              "chart_dir": "charts",
+              "platforms": ""
+            }

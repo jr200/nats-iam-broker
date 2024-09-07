@@ -1,8 +1,8 @@
 ARG GOVERSION=1.22
 FROM golang:${GOVERSION}-alpine AS builder
 
-ARG GOARCH
-ARG GOOS
+ARG BUILD_ARCH
+ARG BUILD_OS
 
 RUN apk update && apk add --no-cache git bash curl jq make
 
@@ -15,8 +15,8 @@ WORKDIR /usr/src/app
 COPY . .
 
 RUN make build && \
-    ln -s /usr/src/app/build/nats-iam-broker-${GOOS}-${GOARCH} /usr/local/bin/nats-iam-broker && \
-    ln -s /usr/src/app/build/test-client-${GOOS}-${GOARCH} /usr/local/bin/test-client
+    ln -s /usr/src/app/build/nats-iam-broker-${BUILD_OS}-${BUILD_ARCH} /usr/local/bin/nats-iam-broker && \
+    ln -s /usr/src/app/build/test-client-${BUILD_OS}-${BUILD_ARCH} /usr/local/bin/test-client
 
 # minimal container
 FROM alpine:3

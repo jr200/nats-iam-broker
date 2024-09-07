@@ -89,7 +89,7 @@ docker-build:
 	podman build \
 	    --layers \
 		-f docker/Dockerfile.example \
-		--build-arg GOOS=linux --build-arg GOARCH=amd64 \
+		--build-arg BUILD_OS=linux --build-arg BUILD_ARCH=amd64 \
 		-t nats-iam-broker:debug \
 		.
 
@@ -106,7 +106,7 @@ chart-deps:
 ################################################################################
 .PHONY: chart-install
 chart-install: chart-deps
-	helm upgrade -n $(K8S_NAMESPACE)  nats-iam-broker charts/nats-iam-broker \
+	helm upgrade -n $(K8S_NAMESPACE) nats-iam-broker charts/nats-iam-broker \
 		--install \
 		--set vault-actions.bootstrapToken=$(VAULT_TOKEN) \
 		-f $(VALUES_PATH)
@@ -116,7 +116,7 @@ chart-install: chart-deps
 ################################################################################
 .PHONY: chart-template
 chart-template: chart-deps
-	helm template -n $(K8S_NAMESPACE)  nats-iam-broker charts/nats-iam-broker \
+	helm template -n $(K8S_NAMESPACE) nats-iam-broker charts/nats-iam-broker \
 		--set vault-actions.bootstrapToken=$(VAULT_TOKEN) \
 		-f $(VALUES_PATH)
 
