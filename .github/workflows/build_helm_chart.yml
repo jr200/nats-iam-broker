@@ -3,135 +3,45 @@ name: build-helm-chart
 on:
   repository_dispatch:
     types:
-      - build-image-success
+      - dispatch-build-helm-chart
 
   workflow_dispatch:
     inputs:
-      tag:
-        description: "chart-version"
+      chart_repo:
+        description: "charts repo"
         required: true
         type: string
-        default: "v0.0.1"
+        default: jr200/helm-charts-private
+      chart_dir:
+        description: "charts folder"
+        required: true
+        type: string
+        default: charts
 
 jobs:
-  release:
-    permissions:
-      contents: write
-    env:
-      CHART_DIR: charts
-      CHART_REPO: jr200/helm-charts
-      CHART_REPO_BRANCH: main
+  configure:
+    uses: jr200/github-action-templates/.github/workflows/preconfigure.yml@main
+    with:
+      event_name: ${{ toJson(github.event_name) }}
+      event: ${{ toJson(github.event) }}
+
+  main:
+    needs: configure
+    uses: jr200/github-action-templates/.github/workflows/build_helm_chart.yml@main
+    with:
+      chart_repo: ${{ fromJson(needs.configure.outputs.context).chart_repo }}
+      chart_dir: ${{ fromJson(needs.configure.outputs.context).chart_dir }}
+    secrets:
+      charts_write_token: ${{ secrets.CHARTS_WRITE_TOKEN }}
+
+  spawn-workflow:
+    needs: main
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Checkout Helm chart repo
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.CHART_REPO }}
-          path: .helm-chart-repo
-          # create a github fine-grained personal access token
-          # - for repo: helm-charts
-          # - with permissions: contents=read+write, metadata=read
-          # then copy that token into a repository secret: CHARTS_WRITE_TOKEN
-          token: ${{ secrets.CHARTS_WRITE_TOKEN }}
-
-      - name: determine Tag
-        id: determine-tag
-        run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
-          else
-            echo "tag=${{ github.event.client_payload.tag }}" >> $GITHUB_ENV
-          fi
-
-      - name: Install yq - portable yaml processor
-        uses: mikefarah/yq@v4.35.1
-
-      - name: Collect charts
-        id: charts
-        run: |
-          set -e
-          find -L charts -mindepth 2 -maxdepth 2 -type f \( -name 'Chart.yaml' -o -name 'Chart.yml' \) -exec dirname "{}" \; \
-          | sort -u \
-          | sed -E 's/^/- /' \
-          | yq --no-colors --indent 0 --output-format json '.' \
-          | sed -E 's/^/charts=/' >> $GITHUB_OUTPUT
-
-      - name: Install chart releaser
-        run: |
-          set -e
-          arch="$(dpkg --print-architecture)"
-          curl -s https://api.github.com/repos/helm/chart-releaser/releases/latest \
-          | yq --indent 0 --no-colors --input-format json --unwrapScalar \
-            ".assets[] | select(.name | test("\""^chart-releaser_.+_linux_${arch}\.tar\.gz$"\"")) | .browser_download_url" \
-          | xargs curl -SsL \
-          | tar zxf - -C /usr/local/bin
-
-      - name: Install Helm
-        uses: azure/setup-helm@v3
-
-      - name: Helm Deps
-        run: |
-          set -ex
-          echo '${{ steps.charts.outputs.charts }}' \
-          | yq --indent 0 --no-colors --input-format json --unwrapScalar '.[]' \
-          | while read -r dir; do
-              helm dependency update $dir;
-              if [ -f "$dir/Chart.lock" ]; then
-                yq --indent 0 \
-                  '.dependencies | map(["helm", "repo", "add", .name, .repository] | join(" ")) | .[]' \
-                  "$dir/Chart.lock" \
-                | sh --;
-              fi
-            done
-
-      - name: Package charts
-        id: package
-        run: |
-          set -ex
-          PACKAGES=.cr-release-packages
-          echo '${{ steps.charts.outputs.charts }}' \
-          | yq --indent 0 --no-colors --input-format json --unwrapScalar '.[]' \
-          | xargs -d$'\n' cr package --package-path "$PACKAGES"
-          echo "dir=${PACKAGES}" >> $GITHUB_OUTPUT
-
-      - name: Upload packages
-        run: |
-          set -ex
-          git config --list
-          owner=$(cut -d '/' -f 1 <<< '${{ github.repository }}')
-          repo=$(cut -d '/' -f 2 <<< '${{ github.repository }}')
-          cr upload --commit '${{ github.sha }}' --git-repo "$repo" --owner "$owner" --token '${{ github.token }}' \
-            --package-path '${{ steps.package.outputs.dir }}' --skip-existing
-
-      - name: Update charts index (without --overwrite flag)
-        working-directory: .helm-chart-repo
-        run: |
-          set -ex
-          git config --local user.name "$GITHUB_ACTOR"
-          git config --local user.email "$GITHUB_ACTOR@users.noreply.github.com"
-          git config --list
-          mkdir -p .cr-index
-          owner=$(cut -d '/' -f 1 <<< '${{ github.repository }}')
-          repo=$(cut -d '/' -f 2 <<< '${{ github.repository }}')
-          cr index --git-repo "$repo" --owner "$owner" \
-            --pages-branch '${{ env.CHART_REPO_BRANCH }}' \
-            --package-path '../${{ steps.package.outputs.dir }}' \
-            --index-path .cr-index \
-            --push
-
-      - name: Repository Dispatch
+      - name: dispatch-next-workflow
         uses: peter-evans/repository-dispatch@v3
         if: github.event_name != 'workflow_dispatch'
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          event-type: build-chart-success
-          client-payload: |-
-            {
-              "ref": "${{ github.ref }}",
-              "sha": "${{ github.sha }}",
-              "tag": "${{ env.tag }}",
-              "artifacts": "${{ github.event.client_payload.artifacts }}"
-            }
+          event-type: dispatch-publish-release
+          client-payload: ${{ toJson(github.event.client_payload) }}
