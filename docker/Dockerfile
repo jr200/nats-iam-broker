@@ -8,7 +8,7 @@ RUN apk update && apk add --no-cache git bash curl jq make
 
 RUN go install github.com/nats-io/nats-server/v2@v2.10.20
 RUN go install github.com/nats-io/natscli/nats@v0.1.5
-RUN go install github.com/nats-io/nsc/v2@v2.8.7
+RUN go install github.com/nats-io/nsc/v2@v2.9.0
 
 WORKDIR /usr/src/app
 
