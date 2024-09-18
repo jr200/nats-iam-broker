@@ -1,8 +1,6 @@
 package server
 
 import (
-	"context"
-
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/micro"
@@ -32,25 +30,19 @@ func Start(configFiles []string) error {
 	}
 	defer nc.Drain()
 
-	idpVerifier, err := NewJwtVerifier(context.Background(), config.Idp.ClientID, config.Idp.IssuerURL)
+	idpVerifiers, err := NewIdpVerifiers(config)
 	if err != nil {
 		return err
 	}
 
 	auth := NewAuthService(config.Service.Account.SigningNKey.KeyPair, config.serviceEncryptionXkey(), func(request *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, error) {
-		// log.Trace().Msgf("received %s", request)
+		// log.Trace().Msgf("NewAuthService (request): %s", request)
 
 		idpJwt := request.ConnectOptions.Password
 
-		reqClaims, err := idpVerifier.verifyJWT(idpJwt)
+		reqClaims, err := runVerification(idpJwt, idpVerifiers)
 		if err != nil {
-			log.Error().Err(err).Msg("error verifying idp-jwt")
 			return nil, nil, err
-		}
-
-		err = idpVerifier.validateAgainstSpec(reqClaims, config.Idp.ValidationSpec)
-		if err != nil {
-			log.Err(err).Msg("failed checks in idp validation")
 		}
 
 		cfgForRequest, err := readConfigFiles(configFiles, reqClaims.toMap())
