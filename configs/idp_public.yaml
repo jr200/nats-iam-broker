@@ -1,16 +1,48 @@
 idp:
-  client_id: public
-  issuer_url:
-    - https://oidctest.wsweet.org/
+  - description: random-ununused-item
+    client_id: random-start
+    issuer_url: https://oidctest.wsweet.org/
 
-  validation:
-    claims:
-      - aud
-      - iat
-      - exp
-      - sub
-    aud:
-      - public
-    exp:
-      min: 1m0s
-      max: 2h
+    validation:
+      claims:
+        - aud
+        - iat
+        - exp
+        - sub
+      aud:
+        - random-aud
+      exp:
+        min: 1m0s
+        max: 2h
+
+  - description: oidctest-public
+    client_id: public
+    issuer_url: https://oidctest.wsweet.org/
+
+    validation:
+      claims:
+        - aud
+        - iat
+        - exp
+        - sub
+      aud:
+        - public
+      exp:
+        min: 1m0s
+        max: 2h
+
+  - description: random-ununused-item
+    client_id: random-end
+    issuer_url: https://oidctest.wsweet.org/
+
+    validation:
+      claims:
+        - aud
+        - iat
+        - exp
+        - sub
+      aud:
+        - random-aud
+      exp:
+        min: 1m0s
+        max: 2h

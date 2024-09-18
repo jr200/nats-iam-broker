@@ -9,19 +9,57 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+type IdpAndJwtVerifier struct {
+	verifier *IdpJwtVerifier
+	config   *Idp
+}
+
+func NewIdpVerifiers(config *Config) ([]IdpAndJwtVerifier, error) {
+	idpVerifiers := make([]IdpAndJwtVerifier, 0, len(config.Idp))
+	for _, idp := range config.Idp {
+		idpVerifier, err := NewJwtVerifier(context.Background(), idp.ClientID, idp.IssuerURL)
+		if err != nil {
+			return nil, err
+		}
+		idpVerifiers = append(idpVerifiers, IdpAndJwtVerifier{idpVerifier, &idp})
+	}
+	return idpVerifiers, nil
+}
+
+func runVerification(jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims, error) {
+	for _, item := range items {
+		reqClaims, err := item.verifier.verifyJWT(jwtToken)
+		if err != nil {
+			log.Trace().Err(err).Msg("error verifying idp-jwt")
+			continue
+		}
+
+		err = item.verifier.validateAgainstSpec(reqClaims, item.config.ValidationSpec)
+		if err != nil {
+			log.Trace().Err(err).Msg("failed checks in idp validation")
+			continue
+		}
+
+		return reqClaims, nil
+	}
+
+	return nil, errors.New("no idp verifier found for jwtToken")
+}
+
 type IdpJwtVerifier struct {
 	*oidc.IDTokenVerifier
 	MaxTokenLifetime time.Duration
 	ClockSkew        time.Duration
 }
 
-func NewJwtVerifier(ctx context.Context, clientID string, issuerUrl []string) (*IdpJwtVerifier, error) {
-	// TODO: support multiple issuers
-	provider, err := oidc.NewProvider(ctx, issuerUrl[0])
+func NewJwtVerifier(ctx context.Context, clientID string, issuerUrl string) (*IdpJwtVerifier, error) {
+	provider, err := oidc.NewProvider(ctx, issuerUrl)
 	if err != nil {
 		log.Err(err)
 		return nil, err
 	}
+
+	log.Trace().Msgf("NewJwtVerifier (config-params) clientId=%s, issuerUrl=%s", clientID, issuerUrl)
 
 	return &IdpJwtVerifier{provider.Verifier(&oidc.Config{ClientID: clientID}), time.Hour * 24, time.Minute * 5}, nil
 }

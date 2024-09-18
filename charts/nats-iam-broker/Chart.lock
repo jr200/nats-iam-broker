@@ -3,4 +3,4 @@ dependencies:
   repository: https://jr200.github.io/helm-charts
   version: 0.1.0
 digest: sha256:97cb234857c08f073577d9ef5926ec4279177d2178dcb9e7d7b44600f704ed91
-generated: "2024-09-07T11:48:09.203889+01:00"
+generated: "2024-09-18T14:32:55.799136+01:00"

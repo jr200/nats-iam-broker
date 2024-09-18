@@ -68,28 +68,28 @@ config:
 
   # configuration of the third-party identity provider that supplied the JWT token
   idp:
-    # The client ID for the identity provider
-    client_id: public
+    - description: oidc-public
+      # The client ID for the identity provider
+      client_id: public
 
-    # URLs of the identity provider issuer
-    issuer_url:
-      - https://oidctest.wsweet.org/
+      # URLs of the identity provider issuer
+      issuer_url: https://oidctest.wsweet.org/
 
-    validation:
-      # claims required to be present on the incoming JWT validation
-      claims:
-        - aud
-        - iat
-        - exp
-        - sub
-      # Expected values for the audience claim of the JWT
-      # to skip this check set it to []
-      aud:
-        - public
-      # acceptable expiration bounds for incoming JWT
-      exp:
-        min: 1m0s
-        max: 2h
+      validation:
+        # claims required to be present on the incoming JWT validation
+        claims:
+          - aud
+          - iat
+          - exp
+          - sub
+        # Expected values for the audience claim of the JWT
+        # to skip this check set it to []
+        aud:
+          - public
+        # acceptable expiration bounds for incoming JWT
+        exp:
+          min: 1m0s
+          max: 2h
 
   # role-based access control configuration section
   rbac:

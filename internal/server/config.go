@@ -20,7 +20,7 @@ type Config struct {
 	AppParams ConfigParams `yaml:"params"`
 	NATS      NATS         `yaml:"nats" validate:"required"`
 	Service   Service      `yaml:"service" validate:"required"`
-	Idp       Idp          `yaml:"idp" validate:"required"`
+	Idp       []Idp        `yaml:"idp" validate:"required"`
 	NatsJwt   NatsJwt      `yaml:"nats_jwt" validate:"required"`
 	Rbac      Rbac         `yaml:"rbac" validate:"required"`
 }
@@ -54,7 +54,8 @@ type Encryption struct {
 }
 
 type Idp struct {
-	IssuerURL      []string             `yaml:"issuer_url" validate:"required"`
+	Description    string               `yaml:"description"`
+	IssuerURL      string               `yaml:"issuer_url" validate:"required"`
 	ClientID       string               `yaml:"client_id" validate:"required"`
 	ValidationSpec IdpJwtValidationSpec `yaml:"validation"`
 }
@@ -150,14 +151,6 @@ func readConfigFiles(files []string, mappings map[string]interface{}) (*Config, 
 		AppParams: ConfigParams{
 			LeftDelim:  "{{",
 			RightDelim: "}}",
-		},
-		Idp: Idp{
-			ValidationSpec: IdpJwtValidationSpec{
-				Expiry: DurationBounds{
-					Min: Duration{time.Duration(0)},
-					Max: Duration{time.Duration(24 * time.Hour)},
-				},
-			},
 		},
 	}
 
