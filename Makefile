@@ -6,12 +6,13 @@ else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),armv8)
 	TARGET_ARCH_LOCAL=arm64
 else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 4),armv)
 	TARGET_ARCH_LOCAL=arm
-else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),arm64)
+else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 6),arm64)
 	TARGET_ARCH_LOCAL=arm64
 else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 7),aarch64)
 	TARGET_ARCH_LOCAL=arm64
 else
-	TARGET_ARCH_LOCAL=amd64
+	echo "Unknown architecture"
+	exit -1
 endif
 export GOARCH ?= $(TARGET_ARCH_LOCAL)
 
@@ -86,10 +87,11 @@ build:
 ################################################################################
 .PHONY: docker-build
 docker-build:
+	echo GOARCH=$(GOARCH)
 	podman build \
 	    --layers \
 		-f docker/Dockerfile.example \
-		--build-arg BUILD_OS=linux --build-arg BUILD_ARCH=amd64 \
+		--build-arg BUILD_OS=linux --build-arg BUILD_ARCH=$(GOARCH) \
 		-t nats-iam-broker:debug \
 		.
 
