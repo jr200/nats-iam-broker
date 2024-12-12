@@ -64,7 +64,7 @@ func NewJwtVerifier(ctx context.Context, clientID string, issuerUrl string) (*Id
 	return &IdpJwtVerifier{provider.Verifier(&oidc.Config{ClientID: clientID}), time.Hour * 24, time.Minute * 5}, nil
 }
 
-// Verifies that the ID token was signed by google and is valid.
+// Verifies that the ID token was signed by idp and is valid.
 // Returns the claims embedded with the token
 func (v *IdpJwtVerifier) verifyJWT(token string) (*IdpJwtClaims, error) {
 	// log.Trace().Msgf("VerifyJWT %s", token)

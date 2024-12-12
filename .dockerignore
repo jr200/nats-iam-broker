@@ -1,12 +1,19 @@
 # .dockerignore
 
 .git
+.gitignore
+.github
 .history
 .vscode
 *.bak
 *.swp
 .DS_Store
+README.md
 
-private
+build/
+charts/
+docker/Dockerfile*
+docs/
+private/
 service/service
 test-client/test-client

@@ -1,0 +1,16 @@
+idp:
+  - description: mockoidc-local
+    client_id: mockclientid
+    issuer_url: http://127.0.0.1:5557/oidc
+
+    validation:
+      claims:
+        - aud
+        - iat
+        - exp
+        - sub
+      aud:
+        - mockclientid
+      exp:
+        min: 1m0s
+        max: 2h

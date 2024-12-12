@@ -1,0 +1,63 @@
+rbac:
+  user_accounts:
+    - name: APP1
+      public_key: '{{ readFile "$SECRET_STORE/APP1/acct-pubkey.pub" | trim }}'
+      signing_nkey: '{{ readFile "$SECRET_STORE/APP1/acct-signing-key.nk" }}'
+
+  role_binding:
+    - match: { claim: sub, value: bob@acme.com }
+      user_account: APP1
+      roles:
+        - can-pubsub
+        - streaming
+        - kv
+        - object-store
+
+    - match: { claim: aud, value: mockclientid }
+      user_account: APP1
+      roles:
+        - can-pubsub
+        - streaming
+        - kv
+        - object-store
+
+  roles:
+    - name: can-pubsub
+      permissions:
+        pub:
+          allow:
+            - mock.{{ strJoin .aud }}.{{ b64encode .sub }}
+        sub:
+          allow:
+            - mock.*.{{ b64encode .sub }}
+
+    - name: streaming
+      permissions:
+        sub:
+          allow:
+            - "$JS.API.>"
+            - "_INBOX.>"
+        pub:
+          allow:
+            - "$JS.API.STREAM.CREATE.mock_test_stream"
+            - "$JS.API.STREAM.UPDATE.mock_test_stream"
+            - "$JS.API.CONSUMER.CREATE.mock_test_stream.mock_test_stream"
+            - "$JS.API.CONSUMER.MSG.NEXT.mock_test_stream.mock_test_stream"
+        resp:
+          max: 1
+          ttl: 1h
+
+      limits:
+        data: 65536
+
+    - name: kv
+      permissions:
+        sub:
+          allow:
+            - "$KV.>"
+
+    - name: object-store
+      permissions:
+        sub:
+          allow:
+            - "$OBJ.>"

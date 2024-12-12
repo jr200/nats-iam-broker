@@ -1,0 +1,196 @@
+---
+# https://github.com/vdbulcke/oidc-server-demo
+
+## Client Credentials: (Mandatory)
+### NOTE: those client_id/client_secret can be passed
+###       as environment variables with: 
+###
+###    export OIDC_CLIENT_ID=my_client_id
+###    export OIDC_CLIENT_SECRET=my_client_id
+###
+client_id: mockclientid
+client_secret: mockclientsecret
+
+## Issuer Base Url (Optional)
+### Set the base url for the OIDC server
+### Issuer is generated using
+###    issuer_base_url + '/oidc'
+###
+### Default: http://127.0.0.1:5557
+# issuer_base_url: http://oidc.example.com:8080
+
+
+## Supported Scropes (optional)
+### List of supported scropes by the OIDC server
+### Default to same default as https://github.com/oauth2-proxy/mockoidc
+supported_scopes: 
+- openid
+- profile
+- email
+- roles
+- api
+- read
+
+### Supported challenge method (Optional)
+###
+### Default: 
+###  - S256
+###  - plain
+###
+pkce_challenge_methods:
+- plain
+- S256
+
+## Issue New RefreshToken on RefreshToken Grant (optional)
+### since v0.7.0
+### Default: false
+# issue_new_refresh_token_on_refresh_token: true
+
+## AccessToken TTL (optional)
+### since v0.7.0
+### Default: 10m
+# access_token_ttl_duration: 20m
+
+## RefreshToken TTL (optional)
+### since v0.7.0
+### Default: 1h
+# refresh_token_ttl_duration: 30m
+
+##
+## Vault Crypto Backend
+##
+### Since: v0.6.0
+### Use vault Transit secret engine 
+### for JWT signing and verifying
+# vault_crypto_backend: 
+#   ## The vault API address
+#   ## NOTE: can be specified with 'VAULT_ADDR' env var
+#   address: http://127.0.0.1:8200 
+#   ## The vault authentication token 
+#   ## WARNING must have the permission to 'read', 'sign', 'verify'
+#   ##         the transit key
+#   ## NOTE:can be specified with 'VAULT_TOKEN' env var
+#   token: "root-token"
+
+#   ## JWT signing alg 
+#   ### Warning: this must be a supported 
+#   ###          algorithm by your transit key
+#   ### Valid values: 
+#   ###  - RS256 RS384 RS512 ES256 ES384 ES512
+#   jwt_signing_alg: RS256
+
+#   ## Vault Transit Key name
+#   transit_key: rsa
+
+
+#   ## Vault Transit Mount 
+#   ### Default: transit/
+#   # transit_mount: alternative/path
+
+#   ## Backend key sync period duration
+#   ##   period at which the backend read the 
+#   ##   transit key info to detect if there has been 
+#   ##   key rotation
+#   ### WARNING: valid duration are 's', 'm', 'h'
+#   ### Default: 5m
+#   # sync_duration: 1h
+
+
+
+
+## Instropect Response Template  (optional)
+### since v0.8.0
+### format: map[string]interface{}
+### Use go template https://pkg.go.dev/text/template
+### syntax to template string properties on introspect
+### response based on claims from Access or Refresh token
+### WARNING: go template only works with string value
+introspect_response_template:
+  ## template standard claims
+  ## https://www.rfc-editor.org/rfc/rfc7662.html#section-2.2
+  client_id: "{{index .aud 0}}"
+  user_id: "{{ .sub }}"
+  username: "{{ .sub }}"
+
+  ## works as well with static properties 
+  foo: 
+  - bar
+  - baz
+
+  
+
+## Default Mock User (Mandatory)
+## 
+mock_user:
+  ## Sub  (Mandatory)
+  ###  the user's subject
+  sub: bob@acme.com
+
+  ## ID Token Claims (mandatory)
+  ### Arbitrary key/values claims to 
+  ### add in the id_token
+  ### 
+  ### Empty set to '{}'
+  id_token_claims: 
+    ## example adding amr values
+    amr:
+      - eid
+      - urn:be:fedict:iam:fas:Level500
+    
+    ## dummy claims
+    foo: 
+      - hello: world
+      - bar: baz
+
+    hello: world
+
+  ## Access Token Claims (Optional)
+  ### Arbitrary key/values claims to 
+  ### add in the access_token
+  ### 
+  access_token_claims: 
+    amr:
+      - eid
+      - urn:be:fedict:iam:fas:Level500
+    
+    foo: 
+      - hello: world
+      - bar: baz
+
+    ## scope: space-separated list of scopes
+    ## https://www.rfc-editor.org/rfc/rfc7662#section-2.2
+    scope: "openid profile email roles api read"
+
+  ## Refresh Token Claims (Optional)
+  ### Arbitrary key/values claims to 
+  ### add in the refresh_token
+  ### since v0.7.0
+  # refresh_token_claims: 
+  #   foo: 
+  #     - hello: world
+  #     - bar: baz
+
+  ## Userinfo Claims (optional)
+  ### Arbitrary key/values claims to 
+  ### add in the userinfo response
+  ### 
+  ### Empty set to '{}'
+  userinfo_claims: 
+
+    ## Mandatory claim
+    sub: bob@acme.com
+
+    ## example 
+    fedid: "73691e9e7beee3becdf78fc9394d28fe548fe249"
+    surname: Bob
+
+    foo: 
+      - hello: world
+      - bar: baz
+
+
+##
+## Additional Mock Users
+##  since version v0.3.0
+### Users loaded in the UserQueue
+# mock_user_folder: ./example/users

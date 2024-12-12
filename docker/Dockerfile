@@ -12,6 +12,10 @@ RUN go install github.com/nats-io/nsc/v2@v2.9.0
 
 WORKDIR /usr/src/app
 
+# pre-download all dependencies once for faster builds
+COPY go.sum go.mod ./
+RUN go mod download
+
 COPY . .
 
 RUN make build && \

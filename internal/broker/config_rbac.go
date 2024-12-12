@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	internal "github.com/jr200/nats-iam-broker/internal"
+
 	"github.com/nats-io/jwt/v2"
 	"github.com/rs/zerolog/log"
 )
@@ -132,8 +134,8 @@ func (c *Config) collateRoles(roles []string) (*jwt.Permissions, *jwt.Limits) {
 		log.Trace().Msgf(
 			"-- assigning role [%s]: permissions=%v, limits=%v",
 			roleName,
-			string(IgnoreError(json.Marshal(role.Permissions))),
-			string(IgnoreError(json.Marshal(role.Limits))),
+			string(internal.IgnoreError(json.Marshal(role.Permissions))),
+			string(internal.IgnoreError(json.Marshal(role.Limits))),
 		)
 
 		collatePermissions(&allPermissions, &role.Permissions)
@@ -142,8 +144,8 @@ func (c *Config) collateRoles(roles []string) (*jwt.Permissions, *jwt.Limits) {
 
 	log.Debug().Msgf(
 		"-- collatedRoles: permissions=%v, limits=%v",
-		string(IgnoreError(json.Marshal(allPermissions))),
-		string(IgnoreError(json.Marshal(allLimits))),
+		string(internal.IgnoreError(json.Marshal(allPermissions))),
+		string(internal.IgnoreError(json.Marshal(allLimits))),
 	)
 
 	return &allPermissions, &allLimits

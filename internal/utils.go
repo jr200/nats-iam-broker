@@ -1,4 +1,4 @@
-package server
+package internal
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func waitForInterrupt() {
+func WaitForInterrupt() {
 	sigch := make(chan os.Signal, 1)
 	signal.Notify(sigch, os.Interrupt)
 	<-sigch
