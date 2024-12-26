@@ -1,3 +1,5 @@
+OIDC_SERVER_VERSION?=v0.8.4
+
 # get target architecture
 LOCAL_ARCH := $(shell uname -m)
 ifeq ($(LOCAL_ARCH),x86_64)
@@ -19,8 +21,10 @@ export GOARCH ?= $(TARGET_ARCH_LOCAL)
 # get docker tag
 ifeq ($(GOARCH),amd64)
 	LATEST_TAG?=latest
+	OIDC_SERVER_ARCH?=''
 else
 	LATEST_TAG?=latest-$(GOARCH)
+	OIDC_SERVER_ARCH?='-arm64'
 endif
 
 # get target os
@@ -91,7 +95,9 @@ docker-build:
 	podman build \
 	    --layers \
 		-f docker/Dockerfile.example \
-		--build-arg BUILD_OS=linux --build-arg BUILD_ARCH=$(GOARCH) \
+		--build-arg BUILD_OS=linux \
+		--build-arg BUILD_ARCH=$(GOARCH) \
+		--build-arg OIDC_SERVER_VERSION=$(OIDC_SERVER_VERSION) \
 		-t nats-iam-broker:debug \
 		.
 
@@ -142,6 +148,13 @@ chart-dry-run:
 .PHONY: example-shell
 example-shell: docker-build
 	docker run --rm -it --entrypoint bash nats-iam-broker:debug
+
+################################################################################
+# Target: example-mock                                                        #
+################################################################################
+.PHONY: example-mock
+example-mock: docker-build
+	docker run --network=host --rm --entrypoint examples/mock/run.sh nats-iam-broker:debug -log-human -log=info
 
 ################################################################################
 # Target: example-basic                                                        #

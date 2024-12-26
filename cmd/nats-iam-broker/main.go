@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	server "github.com/jr200/nats-iam-broker/internal/server"
+	server "github.com/jr200/nats-iam-broker/internal/broker"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )

@@ -1,6 +1,7 @@
 package server
 
 import (
+	internal "github.com/jr200/nats-iam-broker/internal"
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/micro"
@@ -85,7 +86,7 @@ func Start(configFiles []string) error {
 	log.Info().Msgf("Listening to $SYS.REQ.USER.AUTH on %s", nc.ConnectedAddr())
 
 	// Block and wait for interrupt signal
-	waitForInterrupt()
+	internal.WaitForInterrupt()
 
 	log.Info().Msg("Exiting...")
 	return nil
