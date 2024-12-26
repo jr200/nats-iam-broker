@@ -6,9 +6,14 @@ ARG BUILD_OS
 
 RUN apk update && apk add --no-cache git bash curl jq make
 
-RUN go install github.com/nats-io/nats-server/v2@v2.10.20
-RUN go install github.com/nats-io/natscli/nats@v0.1.5
-RUN go install github.com/nats-io/nsc/v2@v2.9.0
+# https://github.com/nats-io/nats-server/releases
+RUN go install github.com/nats-io/nats-server/v2@v2.10.24
+
+# https://github.com/nats-io/natscli/releases
+RUN go install github.com/nats-io/natscli/nats@v0.1.6
+
+# https://github.com/nats-io/nsc/releases
+RUN go install github.com/nats-io/nsc/v2@v2.10.2
 
 WORKDIR /usr/src/app
 
