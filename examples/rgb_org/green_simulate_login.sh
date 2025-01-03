@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
-source ${SCRIPT_DIR}/../../scripts/idp-oidctest-toolkit.sh
+source ${SCRIPT_DIR}/../scripts/idp-oidctest-toolkit.sh
 
 NATS_URL="nats://localhost:4222"
 SECRET_STORE="/usr/src/app/secrets/green"

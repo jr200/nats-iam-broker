@@ -1,7 +1,7 @@
 idp:
   - description: mockoidc-local
     client_id: mockclientid
-    issuer_url: http://127.0.0.1:5557/oidc
+    issuer_url: http://127.0.0.1:5550/oidc
 
     validation:
       claims:

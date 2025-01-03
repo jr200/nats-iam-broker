@@ -5,7 +5,7 @@ source ${SCRIPT_DIR}/../../scripts/nats-toolkit.sh
 
 # start oidc server
 echo starting OIDC-SERVER
-oidc-server start -c /usr/src/app/oidc-server/config.yaml &
+oidc-server start -c /usr/src/app/oidc-server/config.yaml -p 5550 &
 
 # bootstrap a new NATS server with operator 'mock'
 create_new_nats_config "nats://localhost:4222" mock

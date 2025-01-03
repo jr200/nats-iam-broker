@@ -39,5 +39,6 @@ WORKDIR /usr/src/app
 
 COPY --from=builder /usr/local/bin/nats-iam-broker /usr/local/bin/nats-iam-broker
 COPY --from=builder /usr/local/bin/test-client /usr/local/bin/test-client
+COPY --from=builder /usr/src/app/scripts /usr/src/app/scripts
 
 ENTRYPOINT ["bash"]

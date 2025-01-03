@@ -87,10 +87,24 @@ build:
 
 
 ################################################################################
-# Target: docker-build                                                 #
+# Target: docker-offical-build                                                 #
 ################################################################################
-.PHONY: docker-build
-docker-build:
+.PHONY: docker-offical-build
+docker-offical-build:
+	echo GOARCH=$(GOARCH)
+	podman build \
+	    --layers \
+		-f docker/Dockerfile \
+		--build-arg BUILD_OS=linux \
+		--build-arg BUILD_ARCH=$(GOARCH) \
+		-t nats-iam-broker:local \
+		.
+
+################################################################################
+# Target: docker-example-build                                                 #
+################################################################################
+.PHONY: docker-example-build
+docker-example-build:
 	echo GOARCH=$(GOARCH)
 	podman build \
 	    --layers \
@@ -98,6 +112,7 @@ docker-build:
 		--build-arg BUILD_OS=linux \
 		--build-arg BUILD_ARCH=$(GOARCH) \
 		--build-arg OIDC_SERVER_VERSION=$(OIDC_SERVER_VERSION) \
+		--build-arg OIDC_SERVER_ARCH=$(OIDC_SERVER_ARCH) \
 		-t nats-iam-broker:debug \
 		.
 
@@ -146,26 +161,26 @@ chart-dry-run:
 # Target: example-shell                                                        #
 ################################################################################
 .PHONY: example-shell
-example-shell: docker-build
+example-shell: docker-example-build
 	docker run --rm -it --entrypoint bash nats-iam-broker:debug
 
 ################################################################################
 # Target: example-mock                                                        #
 ################################################################################
 .PHONY: example-mock
-example-mock: docker-build
+example-mock: docker-example-build
 	docker run --network=host --rm --entrypoint examples/mock/run.sh nats-iam-broker:debug -log-human -log=info
 
 ################################################################################
 # Target: example-basic                                                        #
 ################################################################################
 .PHONY: example-basic
-example-basic: docker-build
+example-basic: docker-example-build
 	docker run --rm --entrypoint examples/basic/run.sh nats-iam-broker:debug -log-human -log=info
 
 ################################################################################
 # Target: example-rgb_org                                                      #
 ################################################################################
 .PHONY: example-rgb_org
-example-rgb_org: docker-build
+example-rgb_org: docker-example-build
 	docker run --rm --entrypoint examples/rgb_org/run.sh nats-iam-broker:debug -log-human -log=info
