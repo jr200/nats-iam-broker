@@ -7,7 +7,7 @@ FROM golang:${GOVERSION}-alpine AS builder
 ARG BUILD_ARCH
 ARG BUILD_OS
 
-RUN apk update && apk add --no-cache git bash curl jq make
+RUN apk update && apk add --no-cache git bash curl jq make 
 
 # https://github.com/nats-io/nats-server/releases
 RUN go install github.com/nats-io/nats-server/v2@v2.10.24
@@ -41,7 +41,7 @@ LABEL org.opencontainers.image.source="https://github.com/jr200/nats-iam-broker"
 LABEL org.opencontainers.image.description="nats-iam-broker runtime stage"
 
 RUN apk add --no-cache bash curl jq && \
-    apk add --no-cache --update ca-certificates
+    apk add --no-cache --update ca-certificates socat
 
 WORKDIR /usr/src/app
 
@@ -50,6 +50,7 @@ COPY --from=builder /usr/local/bin/test-client /usr/local/bin/test-client
 
 COPY --from=oidc_server /app/oidc-server /usr/local/bin/oidc-server
 COPY ./docker/oidc-server/config.yaml /usr/src/app/oidc-server/config.yaml
+COPY ./docker/debug.sh /bin/debug.sh
 
 # for example programs
 COPY --from=builder /go/bin/nsc /bin/nsc
@@ -59,4 +60,6 @@ COPY --from=builder /usr/src/app/configs /usr/src/app/configs
 COPY --from=builder /usr/src/app/examples /usr/src/app/examples
 COPY --from=builder /usr/src/app/scripts /usr/src/app/scripts
 
-ENTRYPOINT ["bash"]
+ENTRYPOINT ["/bin/debug.sh"]
+
+CMD ["shell"]

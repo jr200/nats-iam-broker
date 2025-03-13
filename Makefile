@@ -97,7 +97,7 @@ docker-offical-build:
 		-f docker/Dockerfile \
 		--build-arg BUILD_OS=linux \
 		--build-arg BUILD_ARCH=$(GOARCH) \
-		-t nats-iam-broker:local \
+		-t ghcr.io/jr200/nats-iam-broker:local \
 		.
 
 ################################################################################
@@ -113,7 +113,7 @@ docker-example-build:
 		--build-arg BUILD_ARCH=$(GOARCH) \
 		--build-arg OIDC_SERVER_VERSION=$(OIDC_SERVER_VERSION) \
 		--build-arg OIDC_SERVER_ARCH=$(OIDC_SERVER_ARCH) \
-		-t nats-iam-broker:debug \
+		-t ghcr.io/jr200/nats-iam-broker:debug \
 		.
 
 ################################################################################

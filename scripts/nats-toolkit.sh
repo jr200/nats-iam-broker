@@ -33,11 +33,23 @@ function create_new_nats_config() {
       max_mem: 32M
       max_file: 32M
   }
+  websocket: {
+    port: 8822
+    no_tls: true
+  }
   include resolver.conf
 EOF
 
 }
 
 function start_nats() {
-  nats-server -c server.conf 2>&1 &
+  local mode=${1:-bg}
+
+  if [[ "$mode" == "fg" ]]; then
+    echo "Starting nats-server in foreground mode..."
+    nats-server -c server.conf 2>&1
+  else
+    echo "Starting nats-server in background mode..."
+    nats-server -c server.conf 2>&1 &
+  fi
 }

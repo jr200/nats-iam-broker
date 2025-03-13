@@ -77,3 +77,14 @@ function create_user() {
       --description "${department}: ${account}/${user}" \
       "${save_name}"
 }
+
+function show_context_creds() {
+  local creds_name=$1
+  local creds_file=`nats context info "${creds_name}" -j | jq -r .creds`
+
+  if [[ -z "$creds_file" ]]; then
+    echo "BAD_CREDS"
+  else
+    cat ${creds_file}
+  fi
+}
