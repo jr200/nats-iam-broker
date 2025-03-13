@@ -10,10 +10,12 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+var serverOpts *server.ServerOptions
+
 func main() {
 	configFiles := parseFlags()
 
-	if err := server.Start(configFiles); err != nil {
+	if err := server.Start(configFiles, serverOpts); err != nil {
 		fmt.Fprintf(os.Stderr, "[service stderr]: %v\n", err)
 		os.Exit(1)
 	}
@@ -25,10 +27,13 @@ func parseFlags() []string {
 
 	flag.StringVar(&logLevel, "log", "info", "set log-level: disabled, panic, fatal, error, warn, info, debug, trace")
 	flag.BoolVar(&logHumanReadable, "log-human", false, "use human-readable logging output")
+
+	serverOpts = server.DefaultServerOptions()
+	flag.BoolVar(&serverOpts.LogSensitive, "log-sensitive", false, "enable sensitive logging (for debugging)")
 	flag.Parse()
 
-	configs := flag.Args()
-	if len(configs) == 0 {
+	config_files := flag.Args()
+	if len(config_files) == 0 {
 		w := flag.CommandLine.Output() // may be os.Stderr - but not necessarily
 		fmt.Fprintf(w, "usage: %s [...flags...] config_1.yaml ... config_n.yaml\n", os.Args[0])
 		flag.PrintDefaults()
@@ -38,7 +43,7 @@ func parseFlags() []string {
 
 	configureLogging(logLevel, logHumanReadable)
 
-	return configs
+	return config_files
 }
 
 func configureLogging(logLevel string, logHumanReadable bool) {

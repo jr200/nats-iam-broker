@@ -26,7 +26,7 @@ function create_new_nats_config() {
   cat <<- EOF > server.conf
   server_name: "test_server"
   logtime: true
-  debug: false
+  debug: true
   trace: false
   jetstream {
       store_dir: /usr/src/app/jsdata

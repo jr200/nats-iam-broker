@@ -10,7 +10,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func Start(configFiles []string) error {
+func Start(configFiles []string, serverOpts *ServerOptions) error {
+	ctx := NewServerContext(serverOpts)
 
 	config, err := readConfigFiles(configFiles, make(map[string]interface{}))
 	if err != nil {
@@ -23,21 +24,21 @@ func Start(configFiles []string) error {
 	})
 
 	// Connect to NATS
-	opts := config.natsOptions()
+	natsOpts := config.natsOptions()
 	log.Info().Msgf("connecting to %s", config.NATS.URL)
-	nc, err := nats.Connect(config.NATS.URL, opts...)
+	nc, err := nats.Connect(config.NATS.URL, natsOpts...)
 	if err != nil {
 		return err
 	}
 	defer nc.Drain()
 
-	idpVerifiers, err := NewIdpVerifiers(config)
+	idpVerifiers, err := NewIdpVerifiers(ctx, config)
 	if err != nil {
 		return err
 	}
 
-	auth := NewAuthService(config.Service.Account.SigningNKey.KeyPair, config.serviceEncryptionXkey(), func(request *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, error) {
-		// log.Trace().Msgf("NewAuthService (request): %s", request)
+	auth := NewAuthService(ctx, config.Service.Account.SigningNKey.KeyPair, config.serviceEncryptionXkey(), func(request *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, error) {
+		log.Trace().Msgf("NewAuthService (request): %s", request)
 
 		idpJwt := request.ConnectOptions.Password
 
@@ -46,15 +47,24 @@ func Start(configFiles []string) error {
 			return nil, nil, err
 		}
 
+		if ctx.Options.LogSensitive {
+			log.Debug().Msgf("reqClaims: %v", reqClaims.toMap())
+		}
+
 		cfgForRequest, err := readConfigFiles(configFiles, reqClaims.toMap())
 		if err != nil {
 			log.Error().Err(err).Msg("error rendering config against idp-jwt")
 			return nil, nil, err
 		}
+
 		userAccountName, permissions, limits := cfgForRequest.lookupUserAccount(reqClaims.toMap())
 		userAccountInfo, err := config.lookupAccountInfo(userAccountName)
 		if err != nil {
 			return nil, nil, err
+		}
+
+		if ctx.Options.LogSensitive {
+			log.Debug().Msgf("userAccountInfo: %v", userAccountInfo)
 		}
 
 		// setup claims for user's nats-jwt

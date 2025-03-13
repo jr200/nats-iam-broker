@@ -11,6 +11,7 @@ import (
 )
 
 type AuthService struct {
+	ctx               *ServerContext
 	serviceAccountKey nkeys.KeyPair
 	encryptionKey     nkeys.KeyPair
 	createNewClaimsFn AuthHandler
@@ -18,8 +19,9 @@ type AuthService struct {
 
 type AuthHandler func(req *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, error)
 
-func NewAuthService(issuer nkeys.KeyPair, xkey nkeys.KeyPair, handler AuthHandler) *AuthService {
+func NewAuthService(ctx *ServerContext, issuer nkeys.KeyPair, xkey nkeys.KeyPair, handler AuthHandler) *AuthService {
 	return &AuthService{
+		ctx:               ctx,
 		serviceAccountKey: issuer,
 		encryptionKey:     xkey,
 		createNewClaimsFn: handler,
@@ -83,7 +85,9 @@ func (a *AuthService) Respond(req micro.Request, userNKey, serverId, userJwt str
 		log.Err(err).Msg("couldn't sign response")
 	}
 
-	// log.Error().Msgf("minted: %s", userJwt)
+	if a.ctx.Options.LogSensitive {
+		log.Debug().Msgf("minted jwt: %s", userJwt)
+	}
 
 	data := []byte(token)
 
