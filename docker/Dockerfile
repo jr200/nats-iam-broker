@@ -1,4 +1,4 @@
-ARG GOVERSION=1.22
+ARG GOVERSION=1.23
 FROM golang:${GOVERSION}-alpine AS builder
 
 ARG BUILD_ARCH
@@ -7,10 +7,10 @@ ARG BUILD_OS
 RUN apk update && apk add --no-cache git bash curl jq make
 
 # https://github.com/nats-io/nats-server/releases
-RUN go install github.com/nats-io/nats-server/v2@v2.10.24
+RUN go install github.com/nats-io/nats-server/v2@v2.11.0
 
 # https://github.com/nats-io/natscli/releases
-RUN go install github.com/nats-io/natscli/nats@v0.1.6
+RUN go install github.com/nats-io/natscli/nats@v0.2.0
 
 # https://github.com/nats-io/nsc/releases
 RUN go install github.com/nats-io/nsc/v2@v2.10.2
@@ -40,6 +40,5 @@ WORKDIR /usr/src/app
 # COPY --from=builder /go/bin/nsc /bin/nsc
 COPY --from=builder /usr/local/bin/nats-iam-broker /usr/local/bin/nats-iam-broker
 COPY --from=builder /usr/local/bin/test-client /usr/local/bin/test-client
-# COPY --from=builder /usr/src/app/scripts /usr/src/app/scripts
 
 ENTRYPOINT ["bash"]

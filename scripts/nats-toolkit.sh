@@ -28,13 +28,14 @@ function create_new_nats_config() {
   logtime: true
   debug: true
   trace: false
+  http_port: 8222
   jetstream {
       store_dir: /usr/src/app/jsdata
       max_mem: 32M
       max_file: 32M
   }
   websocket: {
-    port: 8822
+    port: 8080
     no_tls: true
   }
   include resolver.conf
