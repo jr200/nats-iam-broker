@@ -14,10 +14,10 @@ type IdpAndJwtVerifier struct {
 	config   *Idp
 }
 
-func NewIdpVerifiers(config *Config) ([]IdpAndJwtVerifier, error) {
+func NewIdpVerifiers(ctx *ServerContext, config *Config) ([]IdpAndJwtVerifier, error) {
 	idpVerifiers := make([]IdpAndJwtVerifier, 0, len(config.Idp))
 	for _, idp := range config.Idp {
-		idpVerifier, err := NewJwtVerifier(context.Background(), idp.ClientID, idp.IssuerURL)
+		idpVerifier, err := NewJwtVerifier(ctx, idp.ClientID, idp.IssuerURL)
 		if err != nil {
 			return nil, err
 		}
@@ -28,6 +28,10 @@ func NewIdpVerifiers(config *Config) ([]IdpAndJwtVerifier, error) {
 
 func runVerification(jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims, error) {
 	for _, item := range items {
+		if item.verifier.ctx.Options.LogSensitive {
+			log.Debug().Msgf("verifying jwt against spec. jwt=[%s], spec=[%v]", jwtToken, item.config.ValidationSpec)
+		}
+
 		reqClaims, err := item.verifier.verifyJWT(jwtToken)
 		if err != nil {
 			log.Trace().Err(err).Msg("error verifying idp-jwt")
@@ -47,27 +51,37 @@ func runVerification(jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims,
 }
 
 type IdpJwtVerifier struct {
+	ctx *ServerContext
 	*oidc.IDTokenVerifier
 	MaxTokenLifetime time.Duration
 	ClockSkew        time.Duration
 }
 
-func NewJwtVerifier(ctx context.Context, clientID string, issuerUrl string) (*IdpJwtVerifier, error) {
-	provider, err := oidc.NewProvider(ctx, issuerUrl)
+func NewJwtVerifier(ctx *ServerContext, clientID string, issuerUrl string) (*IdpJwtVerifier, error) {
+	provider, err := oidc.NewProvider(context.Background(), issuerUrl)
 	if err != nil {
 		log.Err(err)
 		return nil, err
 	}
 
-	log.Trace().Msgf("NewJwtVerifier (config-params) clientId=%s, issuerUrl=%s", clientID, issuerUrl)
+	if ctx.Options.LogSensitive {
+		log.Trace().Msgf("NewJwtVerifier (config-params) clientId=%s, issuerUrl=%s", clientID, issuerUrl)
+	}
 
-	return &IdpJwtVerifier{provider.Verifier(&oidc.Config{ClientID: clientID}), time.Hour * 24, time.Minute * 5}, nil
+	return &IdpJwtVerifier{
+		ctx:              ctx,
+		IDTokenVerifier:  provider.Verifier(&oidc.Config{ClientID: clientID}),
+		MaxTokenLifetime: time.Hour * 24,
+		ClockSkew:        time.Minute * 5,
+	}, nil
 }
 
 // Verifies that the ID token was signed by idp and is valid.
 // Returns the claims embedded with the token
 func (v *IdpJwtVerifier) verifyJWT(token string) (*IdpJwtClaims, error) {
-	// log.Trace().Msgf("VerifyJWT %s", token)
+	if v.ctx.Options.LogSensitive {
+		log.Trace().Msgf("VerifyJWT %s", token)
+	}
 	claims := &IdpJwtClaims{}
 
 	idToken, err := v.Verify(context.Background(), token)
@@ -88,7 +102,6 @@ func (v *IdpJwtVerifier) verifyJWT(token string) (*IdpJwtClaims, error) {
 }
 
 func (v *IdpJwtVerifier) ValidateTimes(issuedAt time.Time, expiry time.Time) error {
-
 	if issuedAt.Unix() < 1 {
 		return errors.New("missing 'issued at' time in token")
 	}
@@ -114,24 +127,29 @@ func (v *IdpJwtVerifier) ValidateTimes(issuedAt time.Time, expiry time.Time) err
 	}
 
 	return nil
-
 }
 
 func (v *IdpJwtVerifier) validateAgainstSpec(claims *IdpJwtClaims, spec IdpJwtValidationSpec) error {
-
-	err := claims.exists(spec.Claims)
-	if err != nil {
-		return err
+	if spec.Claims != nil {
+		err := claims.exists(spec.Claims)
+		if err != nil {
+			return err
+		}
 	}
 
-	err = claims.validateAudience(spec.Audience)
-	if err != nil {
-		return err
+	if spec.Audience != nil {
+		err := claims.validateAudience(spec.Audience)
+		if err != nil {
+			log.Error().Err(err).Msgf("failed audience check: %v", spec.Audience)
+			return err
+		}
 	}
 
-	err = claims.validateExpiryBounds(spec.Expiry)
-	if err != nil {
-		return err
+	if spec.Expiry.Min.Duration != 0 && spec.Expiry.Max.Duration != 0 {
+		err := claims.validateExpiryBounds(spec.Expiry)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

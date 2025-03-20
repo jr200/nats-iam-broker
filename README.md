@@ -17,13 +17,14 @@ The assumption is that implementations of auth callout microservices are _almost
 This component implements the boilerplate code and using YAML configuration and golang templating, allows construction of JWTs with claims of the form:
 
 ```
-claims(NATS_JWT) = f(claims(idpJwt))
+claims(natsJwt) = f(claims(idpJwt))
 ```
 
 where:
 
+- `natsJwt` is the JWT sent to the NATS server when establishing a new connection.
 - `f` is a function that extracts and transforms claims from the IdP's Jwt.
-- `idpClaims` is the IdP JWT supplied from the user.
+- `idpJwt` is the IdP JWT supplied from the user.
 
 ## Examples
 

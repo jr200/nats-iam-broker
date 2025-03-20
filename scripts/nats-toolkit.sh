@@ -26,12 +26,17 @@ function create_new_nats_config() {
   cat <<- EOF > server.conf
   server_name: "test_server"
   logtime: true
-  debug: false
+  debug: true
   trace: false
+  http_port: 8222
   jetstream {
       store_dir: /usr/src/app/jsdata
       max_mem: 32M
       max_file: 32M
+  }
+  websocket: {
+    port: 8080
+    no_tls: true
   }
   include resolver.conf
 EOF
@@ -39,5 +44,13 @@ EOF
 }
 
 function start_nats() {
-  nats-server -c server.conf 2>&1 &
+  local mode=${1:-bg}
+
+  if [[ "$mode" == "fg" ]]; then
+    echo "Starting nats-server in foreground mode..."
+    nats-server -c server.conf 2>&1
+  else
+    echo "Starting nats-server in background mode..."
+    nats-server -c server.conf 2>&1 &
+  fi
 }
