@@ -51,6 +51,7 @@ COPY --from=builder /usr/local/bin/test-client /usr/local/bin/test-client
 COPY --from=oidc_server /app/oidc-server /usr/local/bin/oidc-server
 COPY ./docker/oidc-server/config.yaml /usr/src/app/oidc-server/config.yaml
 COPY ./docker/debug.sh /bin/debug.sh
+COPY ./docker/docker-entrypoint.sh /docker-entrypoint.sh
 
 # for example programs
 COPY --from=builder /go/bin/nsc /bin/nsc
