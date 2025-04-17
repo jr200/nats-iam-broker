@@ -1,25 +1,29 @@
 idp:
-  - description: random-ununused-item
-    client_id: random-start
-    issuer_url: https://oidctest.wsweet.org/
+  # - description: random-ununused-item
+  #   client_id: random-start
+  #   issuer_url: https://oidctest.wsweet.org/
 
-    validation:
-      claims:
-        - aud
-        - iat
-        - exp
-        - sub
-      aud:
-        - random-aud
-      exp:
-        min: 1m0s
-        max: 2h
+  #   validation:
+  #     token_bounds:
+  #       min: 1m0s
+  #       max: 2h
+  #     claims:
+  #       - aud
+  #       - iat
+  #       - exp
+  #       - sub
+  #     aud:
+  #       - random-aud
 
   - description: oidctest-public
     client_id: public
     issuer_url: https://oidctest.wsweet.org/
+    user_info:
+      enabled: true # Enable fetching user info from the idp
 
     validation:
+      token_bounds:
+        max: 2h
       claims:
         - aud
         - iat
@@ -27,15 +31,15 @@ idp:
         - sub
       aud:
         - public
-      exp:
-        min: 1m0s
-        max: 2h
 
   - description: random-ununused-item
     client_id: random-end
     issuer_url: https://oidctest.wsweet.org/
 
     validation:
+      token_bounds:
+        min: 2s
+        max: 1h
       claims:
         - aud
         - iat
@@ -43,6 +47,3 @@ idp:
         - sub
       aud:
         - random-aud
-      exp:
-        min: 1m0s
-        max: 2h
