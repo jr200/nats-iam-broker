@@ -63,7 +63,7 @@ K8S_NAMESPACE ?= nats-iam-broker
 # Target: all                                                                  #
 ################################################################################
 .PHONY: all
-all: fmt build
+all: fmt lint build
 
 ################################################################################
 # Target: fmt                                                                  #
@@ -71,6 +71,20 @@ all: fmt build
 .PHONY: fmt
 fmt:
 	go fmt $$(go list ./...)
+
+################################################################################
+# Target: lint                                                                 #
+################################################################################
+.PHONY: lint
+lint:
+	go vet $$(go list ./...)
+	@if command -v golangci-lint > /dev/null; then \
+		echo "Running golangci-lint..."; \
+		golangci-lint run --timeout=5m; \
+	else \
+		echo "golangci-lint not found, skipping"; \
+		echo "Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
+	fi
 
 ################################################################################
 # Target: build                                                                #

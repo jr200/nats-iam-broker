@@ -58,7 +58,6 @@ type Limits struct {
 }
 
 func (c *Config) lookupAccountInfo(userAccount string) (*UserAccountInfo, error) {
-
 	for _, acinfo := range c.Rbac.Accounts {
 		if acinfo.Name == userAccount {
 			return &acinfo, nil
@@ -107,7 +106,6 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 }
 
 func (c *Config) collateRoles(roles []string) (*jwt.Permissions, *jwt.Limits) {
-
 	allPermissions := jwt.Permissions{
 		Resp: &jwt.ResponsePermission{
 			Expires: 0,
@@ -177,7 +175,6 @@ func collatePermissions(base *jwt.Permissions, other *Permissions) {
 }
 
 func (c *Config) lookupRole(roleName string) *Role {
-
 	for _, role := range c.Rbac.Roles {
 		if role.Name == roleName {
 			return &role

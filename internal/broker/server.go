@@ -25,12 +25,23 @@ func Start(configFiles []string, serverOpts *ServerOptions) error {
 
 	// Connect to NATS
 	natsOpts := config.natsOptions()
+
+	natsDrainConnection := func(nc *nats.Conn) {
+		if nc != nil {
+			err := nc.Drain()
+			if err != nil {
+				log.Err(err).Msg("error draining NATS connection")
+			}
+		}
+	}
+
 	log.Info().Msgf("connecting to %s", config.NATS.URL)
 	nc, err := nats.Connect(config.NATS.URL, natsOpts...)
 	if err != nil {
 		return err
 	}
-	defer nc.Drain()
+
+	defer natsDrainConnection(nc)
 
 	idpVerifiers, err := NewIdpVerifiers(ctx, config)
 	if err != nil {

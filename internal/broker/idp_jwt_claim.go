@@ -52,7 +52,7 @@ func (a *JwtClaimAudience) UnmarshalJSON(data []byte) error {
 }
 
 func (j *IdpJwtClaims) toMap() map[string]interface{} {
-	var result map[string]interface{}
+	result := make(map[string]interface{})
 
 	// Marshal the struct to JSON
 	jsonBytes, err := json.Marshal(j)
@@ -61,9 +61,7 @@ func (j *IdpJwtClaims) toMap() map[string]interface{} {
 		return result
 	}
 
-	// Unmarshal the JSON into a map
-	err = json.Unmarshal(jsonBytes, &result)
-	if err != nil {
+	if err := json.Unmarshal(jsonBytes, &result); err != nil {
 		log.Err(err)
 		return result
 	}
@@ -72,7 +70,6 @@ func (j *IdpJwtClaims) toMap() map[string]interface{} {
 }
 
 func (j *IdpJwtClaims) exists(expected []string) error {
-
 	claimsMap := j.toMap()
 	log.Trace().Msgf("idp claims: %v", claimsMap)
 	for _, claimName := range expected {
@@ -87,7 +84,6 @@ func (j *IdpJwtClaims) exists(expected []string) error {
 }
 
 func (j *IdpJwtClaims) validateAudience(expected []string) error {
-
 	for _, claimAud := range j.Audience {
 		for _, expectedClaim := range expected {
 			if claimAud == expectedClaim {
@@ -100,7 +96,6 @@ func (j *IdpJwtClaims) validateAudience(expected []string) error {
 }
 
 func (j *IdpJwtClaims) validateExpiryBounds(bounds DurationBounds) error {
-
 	now := time.Now().Unix()
 	ttl := time.Duration((j.Expiry - now) * int64(time.Second))
 

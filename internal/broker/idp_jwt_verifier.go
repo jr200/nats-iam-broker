@@ -57,22 +57,23 @@ type IdpJwtVerifier struct {
 	ClockSkew        time.Duration
 }
 
-func NewJwtVerifier(ctx *ServerContext, clientID string, issuerUrl string) (*IdpJwtVerifier, error) {
-	provider, err := oidc.NewProvider(context.Background(), issuerUrl)
+	const maxTokenLifetime = time.Hour * 24
+	const clockSkew = time.Minute * 5
+
+	provider, err := oidc.NewProvider(context.Background(), issuerURL)
 	if err != nil {
 		log.Err(err)
 		return nil, err
 	}
 
 	if ctx.Options.LogSensitive {
-		log.Trace().Msgf("NewJwtVerifier (config-params) clientId=%s, issuerUrl=%s", clientID, issuerUrl)
+		log.Trace().Msgf("NewJwtVerifier (config-params) clientId=%s, issuerUrl=%s", clientID, issuerURL)
 	}
 
 	return &IdpJwtVerifier{
-		ctx:              ctx,
-		IDTokenVerifier:  provider.Verifier(&oidc.Config{ClientID: clientID}),
-		MaxTokenLifetime: time.Hour * 24,
-		ClockSkew:        time.Minute * 5,
+		// TODO: take MaxTokenLifetime from config
+		MaxTokenLifetime: maxTokenLifetime,
+		ClockSkew:        clockSkew,
 	}, nil
 }
 
