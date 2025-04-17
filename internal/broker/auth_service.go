@@ -29,7 +29,7 @@ func NewAuthService(ctx *ServerContext, issuer nkeys.KeyPair, xkey nkeys.KeyPair
 }
 
 func (a *AuthService) Handle(inRequest micro.Request) {
-	log.Trace().Msgf("handling request (headers): %s", inRequest.Headers())
+	log.Trace().Msgf("handling request (headers): %s", SecureLogKey(inRequest.Headers()))
 
 	var token []byte
 	var err error

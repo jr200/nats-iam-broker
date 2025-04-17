@@ -25,6 +25,7 @@ func Start(configFiles []string, serverOpts *ServerOptions) error {
 
 	// Connect to NATS
 	natsOpts := config.natsOptions()
+	natsOpts = append(natsOpts, nats.Name(config.Service.Name))
 
 	natsDrainConnection := func(nc *nats.Conn) {
 		if nc != nil {
@@ -85,11 +86,7 @@ func Start(configFiles []string, serverOpts *ServerOptions) error {
 		claims.Expires = reqClaims.Expiry
 		claims.Permissions = *permissions
 		claims.Limits = *limits
-
-		return claims, userAccountInfo.SigningNKey.KeyPair, nil
-	})
-
-	log.Info().Msgf("Starting service %s v%s", config.Service.Name, config.Service.Version)
+	log.Info().Msgf("Starting service v%s", config.Service.Version)
 
 	_, err = micro.AddService(nc, micro.Config{
 		Name:        config.Service.Name,

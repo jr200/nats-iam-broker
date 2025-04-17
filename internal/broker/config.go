@@ -98,11 +98,104 @@ func (v *NKey) UnmarshalText(text []byte) error {
 	nkey, err := nkeys.FromSeed([]byte(text))
 	if err != nil {
 		// possibly templated
-		log.Debug().Msgf("skipped parsing nkey: %v (%v)", string(text), err)
+		log.Debug().Msgf("skipped parsing nkey: %v (%v)", SecureLogKey(string(text)), err)
 		return nil
 	}
 	v.KeyPair = nkey
 	return nil
+}
+
+// Helper function to improve YAML unmarshaling error messages
+func improveYAMLErrorMessage(err error) error {
+	errMsg := err.Error()
+
+	// Check if it's an unmarshaling error
+	if !strings.Contains(errMsg, "unmarshal") {
+		return err
+	}
+
+	// First check for the specific array error pattern that doesn't get captured properly
+	if strings.Contains(errMsg, "cannot unmarshal !!map into []") {
+		// Extract a more helpful line number if possible
+		lineMatch := regexp.MustCompile(`line (\d+):`).FindStringSubmatch(errMsg)
+		lineNum := "unknown"
+		if len(lineMatch) >= 2 {
+			lineNum = lineMatch[1]
+		}
+
+		// Extract the type if possible
+		typeMatch := regexp.MustCompile(`into \[\]([^\s]+)`).FindStringSubmatch(errMsg)
+		typeStr := "array"
+		if len(typeMatch) >= 2 {
+			typeStr = typeMatch[1]
+		}
+
+		typeExplanation := fmt.Sprintf(
+			"In your YAML configuration: Found a single object where an array was expected.\n"+
+				"The merged configuration shows this at line %s, but it might be in any of your config files.\n"+
+				"Field type: []%s\n"+
+				"Check ALL your config files for this pattern:\n"+
+				"  field: { key: value }\n"+
+				"And replace with:\n"+
+				"  field:\n"+
+				"  - { key: value }\n"+
+				"Note the dash (-) which indicates an array element.",
+			lineNum, typeStr)
+
+		return fmt.Errorf("YAML configuration error: %s\n\nOriginal error: %v", typeExplanation, err)
+	}
+
+	// Extract line number and type information if available
+	lineMatch := regexp.MustCompile(`line (\d+):.*unmarshal !!(\w+) into \[?]?([^\s]+)`).FindStringSubmatch(errMsg)
+	if len(lineMatch) >= 4 {
+		lineNum := lineMatch[1]
+		actualType := lineMatch[2]
+		expectedType := lineMatch[3]
+
+		typeExplanation := ""
+
+		// Common type mismatch scenarios
+		if actualType == "map" && strings.HasPrefix(expectedType, "[]") {
+			// Map into array error
+			typeExplanation = fmt.Sprintf(
+				"In your YAML configuration: Found a single object where an array was expected.\n"+
+					"The merged configuration shows this at line %s, but it might be in any of your config files.\n"+
+					"Field type: %s\n"+
+					"Check ALL your config files for this pattern:\n"+
+					"  field: { key: value }\n"+
+					"And replace with:\n"+
+					"  field:\n"+
+					"  - { key: value }\n"+
+					"Note the dash (-) which indicates an array element.",
+				lineNum, expectedType)
+		} else if actualType == "seq" && !strings.HasPrefix(expectedType, "[]") {
+			// Array into non-array error
+			typeExplanation = fmt.Sprintf(
+				"In your YAML configuration: Found an array where a single object was expected.\n"+
+					"The merged configuration shows this at line %s, but it might be in any of your config files.\n"+
+					"Field type: %s\n"+
+					"Check ALL your config files for this pattern:\n"+
+					"  field:\n"+
+					"  - key: value\n"+
+					"And replace with:\n"+
+					"  field:\n"+
+					"    key: value\n"+
+					"Remove the dash (-) since this isn't an array.",
+				lineNum, expectedType)
+		} else {
+			// Generic type mismatch
+			typeExplanation = fmt.Sprintf(
+				"In your YAML configuration: Type mismatch - found '%s' but expected '%s'.\n"+
+					"The merged configuration shows this at line %s, but it might be in any of your config files.\n"+
+					"Check the YAML structure in all your configuration files.",
+				actualType, expectedType, lineNum)
+		}
+
+		return fmt.Errorf("YAML configuration error: %s\n\nOriginal error: %v", typeExplanation, err)
+	}
+
+	// If we couldn't parse the specific error, return a slightly improved general message
+	return fmt.Errorf("error in YAML configuration. Please check your YAML syntax and field types.\nOriginal error: %v", err)
 }
 
 func mergeConfigurationFiles(files []string) (string, error) {
