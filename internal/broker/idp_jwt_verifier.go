@@ -11,6 +11,10 @@ import (
 	"golang.org/x/oauth2"
 )
 
+type UserInfoProvider interface {
+	GetUserInfo(ctx context.Context, token string) (map[string]interface{}, error)
+}
+
 type IdpAndJwtVerifier struct {
 	verifier *IdpJwtVerifier
 	config   *Idp
@@ -28,15 +32,19 @@ func NewIdpVerifiers(ctx *ServerContext, config *Config) ([]IdpAndJwtVerifier, e
 	return idpVerifiers, nil
 }
 
-func runVerification(jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims, error) {
+func runVerification(jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims, *IdpAndJwtVerifier, error) {
 	for _, item := range items {
 		if item.verifier.ctx.Options.LogSensitive {
 			log.Debug().Msgf("verifying jwt against spec. jwt=[%s], spec=[%v]", jwtToken, item.config.ValidationSpec)
 		}
-
-		reqClaims, err := item.verifier.verifyJWT(jwtToken)
+		reqClaims, idToken, err := item.verifier.verifyJWT(jwtToken, item.config.CustomMapping)
 		if err != nil {
-			log.Trace().Err(err).Msg("error verifying idp-jwt")
+			var expiredErr *oidc.TokenExpiredError
+			if errors.As(err, &expiredErr) {
+				log.Debug().Msgf("error verifying idp-jwt, %s. Token expired at %v", item.config.Description, expiredErr.Expiry)
+				continue
+			}
+			log.Trace().Msgf("error verifying idp-jwt, %s. Trying next idp...", item.config.Description)
 			continue
 		}
 
@@ -46,19 +54,28 @@ func runVerification(jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims,
 			continue
 		}
 
-		return reqClaims, nil
+		// Store the idToken for use in fetching user info
+		if idToken != nil {
+			item.verifier.IDToken = idToken
+		}
+
+		return reqClaims, &item, nil
 	}
 
-	return nil, errors.New("no idp verifier found for jwtToken")
+	return nil, nil, errors.New("no idp verifier found for jwtToken")
 }
 
 type IdpJwtVerifier struct {
 	ctx *ServerContext
 	*oidc.IDTokenVerifier
+	provider         *oidc.Provider
+	issuerURL        string
 	MaxTokenLifetime time.Duration
 	ClockSkew        time.Duration
+	IDToken          *oidc.IDToken
 }
 
+func NewJwtVerifier(ctx *ServerContext, clientID string, issuerURL string) (*IdpJwtVerifier, error) {
 	const maxTokenLifetime = time.Hour * 24
 	const clockSkew = time.Minute * 5
 
@@ -73,6 +90,10 @@ type IdpJwtVerifier struct {
 	}
 
 	return &IdpJwtVerifier{
+		ctx:             ctx,
+		IDTokenVerifier: provider.Verifier(&oidc.Config{ClientID: clientID}),
+		provider:        provider,
+		issuerURL:       issuerURL,
 		// TODO: take MaxTokenLifetime from config
 		MaxTokenLifetime: maxTokenLifetime,
 		ClockSkew:        clockSkew,
@@ -169,4 +190,31 @@ func (v *IdpJwtVerifier) validateAgainstSpec(claims *IdpJwtClaims, spec IdpJwtVa
 	}
 
 	return nil
+}
+
+func (v *IdpJwtVerifier) GetUserInfo(ctx context.Context, accessToken string) (map[string]interface{}, error) {
+	// Parse and verify the ID token
+	if accessToken == "" {
+		return nil, fmt.Errorf("no access token found in claim sources")
+	}
+
+	// Verify the access token matches the hash in the ID token
+	if err := v.IDToken.VerifyAccessToken(accessToken); err != nil {
+		return nil, fmt.Errorf("access token verification failed: %w", err)
+	}
+
+	// Use the verified access token to fetch user info
+	userInfo, err := v.provider.UserInfo(ctx, oauth2.StaticTokenSource(&oauth2.Token{
+		AccessToken: accessToken,
+	}))
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch user info: %w", err)
+	}
+
+	userInfoClaims := make(map[string]interface{})
+	if err := userInfo.Claims(&userInfoClaims); err != nil {
+		return nil, fmt.Errorf("failed to parse user info claims: %w", err)
+	}
+
+	return userInfoClaims, nil
 }

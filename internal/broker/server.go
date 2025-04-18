@@ -65,16 +65,60 @@ func Start(configFiles []string, serverOpts *ServerOptions) error {
 	log.Info().Msgf("Audit events will be published to: %s", strings.Replace(auditEventSubject, "%s", "*", 2))
 
 	auth := NewAuthService(ctx, config.Service.Account.SigningNKey.KeyPair, config.serviceEncryptionXkey(), func(request *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error) {
+		var tokenReq TokenRequest
+		var idpRawJwt string
+
 		log.Trace().Msgf("NewAuthService (request): %s", request)
 
+		if request.ConnectOptions.Token != "" {
+			// Try to parse as JSON token response first
+			if err := json.Unmarshal([]byte(request.ConnectOptions.Token), &tokenReq); err == nil {
+				idpRawJwt = tokenReq.IDToken
+			} else {
+				// If not JSON, treat as raw JWT
+				idpRawJwt = request.ConnectOptions.Token
+			}
+		} else {
+			// Try password field if token is empty
+			if err := json.Unmarshal([]byte(request.ConnectOptions.Password), &tokenReq); err == nil {
+				idpRawJwt = tokenReq.IDToken
+			} else {
+				idpRawJwt = request.ConnectOptions.Password
+			}
+		}
+
+		if idpRawJwt == "" {
+			return nil, nil, nil, fmt.Errorf("no valid JWT token found in request")
+		}
 
 		reqClaims, matchedVerifier, err := runVerification(idpRawJwt, idpVerifiers)
 		if err != nil {
 			return nil, nil, nil, err
 		}
 
+		// Only fetch and append user info if enabled for this IDP
+		if matchedVerifier.config.UserInfo.Enabled {
+			if tokenReq.AccessToken != "" {
+				userInfo, err := matchedVerifier.verifier.GetUserInfo(context.Background(), tokenReq.AccessToken)
+				if err != nil {
+					log.Warn().Err(err).Msg("failed to fetch user info")
+				} else {
+					// Merge user info into claims
+					claims := reqClaims.toMap()
+					for k, v := range userInfo {
+						claims[k] = v
+					}
+					reqClaims.fromMap(claims, matchedVerifier.config.CustomMapping)
+				}
+			} else {
+				log.Debug().Msg("skipping user info fetch - no access token available")
+			}
+		}
+
 		// Merge in client information from the request
 		reqJwtClaims := reqClaims.toMap()
+		reqJwtClaims["client_id"] = request.ClientInformation.User        // Sentinel ID
+		reqJwtClaims["also_known_as"] = request.ClientInformation.NameTag // Sentinel name
 		reqClaims.fromMap(reqJwtClaims, matchedVerifier.config.CustomMapping)
 
 		if ctx.Options.LogSensitive {
@@ -111,6 +155,11 @@ func Start(configFiles []string, serverOpts *ServerOptions) error {
 		)
 		claims.Permissions = *permissions
 		claims.Limits = *limits
+		claims.Tags.Add(fmt.Sprintf("email: %s, name: %s, idp: %s, expires: %s",
+			reqClaims.Email,
+			reqClaims.Name,
+			matchedVerifier.config.Description,
+			time.Unix(claims.Expires, 0).Format(time.RFC3339)))
 
 		// Determine the type of signing key used
 		signingKeyInfo, err := determineSigningKeyType(claims, userAccountInfo.SigningNKey.KeyPair, userAccountInfo)
@@ -149,6 +198,9 @@ func Start(configFiles []string, serverOpts *ServerOptions) error {
 				log.Warn().Err(err).Msg("failed to publish user creation event")
 			}
 		}
+
+		return claims, userAccountInfo.SigningNKey.KeyPair, userAccountInfo, nil
+	})
 
 	log.Info().Msgf("Starting service v%s", config.Service.Version)
 
