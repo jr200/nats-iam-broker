@@ -1,0 +1,35 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Package",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}/cmd/nats-iam-broker/main.go",
+            "args": [
+                "-log-human",
+                // "-log=trace",
+                "${workspaceFolder}/configs/env_minter.yaml",
+                "${workspaceFolder}/configs/idp_private.yaml",
+                "${workspaceFolder}/configs/idp_public.yaml",
+                "${workspaceFolder}/examples/basic/rbac.yaml"
+            ],
+            "env": {
+                "NATS_URL": "nats://localhost:4222",
+                "SECRET_STORE": "/Users/user/code/nats-iam-broker/assets/pki",
+                "SERVICE_NAME": "nats-iam-broker",
+                "SERVICE_VERSION": "0.0.11",
+                "SERVICE_DESC": "nats-iam-broker Jwt Minting Service",
+                "NATS_ACCOUNT": "MINTER",
+                "SERVICE_USER_CREDS": "$SECRET_STORE/nats/nsc/keys/creds/OP_DEV/MINTER/auth.creds",
+                "SERVICE_ACCT_SIGNK": "$SECRET_STORE/Accounts/MINTER/acct-signing-key.nk",
+                "SERVICE_ACCT_XK": "$SECRET_STORE/Accounts/MINTER/acct-encryption-key.xk"
+            }
+        }
+    ]
+}

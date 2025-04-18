@@ -1,22 +1,23 @@
-params:
-  left_delim: "{{"
-  right_delim: "}}"
+# params:
+#   left_delim: "{{"
+#   right_delim: "}}"
 
 nats:
   url: '{{ env "NATS_URL" }}'
+  token_bounds:
+    min: 1s
+    # max: 7d
+    # max: 10s
 
 service:
   name: '{{ env "SERVICE_NAME" }}'
   version: '{{ env "SERVICE_VERSION" }}'
   description: '{{ env "SERVICE_DESC" }}'
-  creds_file: '{{ env "SERVICE_USER_CREDS" }}'
+  creds_file: '{{ expandEnv (env "SERVICE_USER_CREDS") }}'
 
   account:
     name: '{{ env "NATS_ACCOUNT" }}'
-    signing_nkey: '{{ readFile "$SERVICE_ACCT_SIGNK" }}'
+    signing_nkey: '{{ readFile (expandEnv (env "SERVICE_ACCT_SIGNK")) }}'
     encryption:
       enabled: true
-      xkey_secret: '{{ readNthLine 1 (env "SERVICE_ACCT_XK") }}'
-
-nats_jwt:
-  exp_max: 1h15m
+      xkey_secret: '{{ readNthLine 1 (expandEnv (env "SERVICE_ACCT_XK")) }}'

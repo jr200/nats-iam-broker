@@ -13,7 +13,7 @@ func WaitForInterrupt() {
 	<-sigch
 }
 
-func IgnoreError[T any](val T, err error) T {
+func IgnoreError[T any](val T, _ error) T {
 	return val
 }
 
@@ -33,9 +33,9 @@ func CollapseError(val any, err error) string {
 }
 
 func ParseDelimiters(delim string) (string, string) {
-
+	const expectedNumberOfDelimiters = 2
 	parts := strings.Split(delim, ",")
-	if len(parts) != 2 {
+	if len(parts) != expectedNumberOfDelimiters {
 		fmt.Fprintf(os.Stderr, "Invalid 'delim' format. Expected 'left,right'.\n")
 		os.Exit(1)
 	}

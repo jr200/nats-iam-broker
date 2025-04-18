@@ -1,23 +1,79 @@
 rbac:
+  token_max_expiration: 8h
   user_accounts:
     - name: APP1
-      public_key: '{{ readFile "$SECRET_STORE/APP1/acct-pubkey.pub" | trim }}'
-      signing_nkey: '{{ readFile "$SECRET_STORE/APP1/acct-signing-key.nk" }}'
+      public_key:   '{{ readFile "$SECRET_STORE/Accounts/APP1/acct-pubkey.pub" | trim }}'
+      signing_nkey: '{{ readFile "$SECRET_STORE/Accounts/APP1/acct-signing-key.nk" }}'
+    - name: TEST
+      public_key:   '{{ readFile "$SECRET_STORE/Accounts/TEST/acct-pubkey.nk" }}'
+      signing_nkey: '{{ readFile "$SECRET_STORE/Accounts/TEST/acct-signing-key.nk" }}'
+    - name: TEST2
+      public_key:   '{{ readFile "$SECRET_STORE/Accounts/TEST2/acct-pubkey.nk" }}'
+      signing_nkey: '{{ readFile "$SECRET_STORE/Accounts/TEST2/acct-signing-key.nk"}}'
+    - name: FOO
+      public_key:   '{{ readFile "$SECRET_STORE/Accounts/TEST2/acct-pubkey.nk" }}'
+      signing_nkey: '{{ readFile "$SECRET_STORE/Accounts/TEST2/acct-signing-key.nk"}}'
 
   role_binding:
-    - match: { claim: sub, value: dwho }
-      user_account: APP1
+    - user_account: APP1
+      match:
+        - { claim: sub, value: dwho }
       roles:
         - can-pubsub
         - streaming
         - kv
         - object-store
 
-    - match: { claim: aud, value: public }
-      user_account: APP1
+    - user_account: APP1
+      match:
+        - { claim: aud, value: public }
       roles:
         - can-pubsub
         - streaming
+
+    - user_account: TEST
+      match:
+        - { claim: client_id, value: "UBE6WG2H34BOXWBNMMA3F67RBAT75AMK7U77ZSW6ILTVUCEHOB7YCDHY" }
+      token_max_expiration: 24h
+      roles:
+        # - can-pubsub
+        - streaming
+        - kv
+        - object-store
+        - can-pubsub-foo
+
+    - user_account: TEST2
+      match:
+        - { claim: client_id, value: "UBYLQLVSLUMX5OPEDWOT7WFYHXV55TTUTKPDLNB7JWVHVN4YXGLVGYTN" }
+        - { permission: "nats:account:test2" }
+      token_max_expiration: 24h
+      roles:
+        # - can-pubsub
+        - streaming
+        - kv
+        - object-store
+        - can-pubsub-foo
+        - can-pubsub-foo
+
+    - user_account: TEST
+      match:
+        - { claim: aud, value: public }
+        - { claim: sub, value: "dwho" }
+      token_max_expiration: 1h
+      roles:
+        # - can-pubsub
+        - streaming
+        - can-pubsub-foo
+
+    - user_account: TEST
+      match:
+        - { claim: aud, value: public }
+        - { claim: sub, value: "rtyler" }
+      token_max_expiration: 10s
+      roles:
+        # - can-pubsub
+        - streaming
+        - can-pubsub-foo
 
   roles:
     - name: can-pubsub
@@ -28,6 +84,17 @@ rbac:
         sub:
           allow:
             - basic.*.{{ b64encode .sub }}
+
+    - name: can-pubsub-foo
+      permissions:
+        pub:
+          allow:
+            - foo
+            - foo.>
+        sub:
+          allow:
+            - foo
+            - foo.*
 
     - name: streaming
       permissions:
@@ -40,10 +107,10 @@ rbac:
             - "$JS.API.STREAM.CREATE.basic_test_stream"
             - "$JS.API.STREAM.UPDATE.basic_test_stream"
             - "$JS.API.CONSUMER.CREATE.basic_test_stream.basic_test_stream"
-            - "$JS.API.CONSUMER.MSG.NEXT.basic_test_stream.basic_test_stream"
+            - "$JS.API.CONSUMER.MSG.basic_test_stream.basic_test_stream"
         resp:
-          max: 1
-          ttl: 1h
+          max_msgs: 1
+          exp: 1h
 
       limits:
         data: 65536

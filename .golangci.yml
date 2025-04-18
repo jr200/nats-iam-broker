@@ -1,0 +1,42 @@
+linters:
+  disable-all: true
+  enable:
+    - gofmt       # Ensure go formatting is used
+    - goimports   # Ensure standard import formatting/ordering
+    - govet       # Reports suspicious constructs
+    - gosec       # Inspects code for security problems by scanning the Go AST
+    - goconst     # Detect repeated values that can be made constants
+    - mnd       # Magic number detection
+    - errcheck    # Detect unchecked errors
+    - gosimple    # Suggest code simplifications
+    - ineffassign # Detects unused variable assignments
+    - staticcheck # go vet on steroids
+    - typecheck   # Standard go type checks
+    - unused      # Detect unused constants, variables, functions and types
+    - unparam     # Detect unused function parameters
+    - nakedret    # Detect naked returns
+    - nolintlint  # Detect nolints with ill-formed or insufficiently exampled //nolint
+    - gocyclo     # Detect cyclomatic complexity, or switch to "cyclop"
+    - gocritic    # Check currently missing from other linters
+    - misspell    # Fix spelling errors
+    - revive      # General purpose linter
+    - unconvert   # Detect unnecessary type conversions
+    - errchkjson  # handles JSON-specific checks
+    - whitespace  # Detect whitespace
+
+    # Optional
+    - noctx     # finds sending http request without context.Context
+    - tparallel # Detects inappropriate use of t.Parallel()
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files.
+    - path: _test\.go
+      linters:
+        - mnd
+        - gosec
+        - errcheck
+        - goconst
+
+run:
+  timeout: 5m

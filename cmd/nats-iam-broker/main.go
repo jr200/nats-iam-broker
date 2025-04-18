@@ -32,8 +32,8 @@ func parseFlags() []string {
 	flag.BoolVar(&serverOpts.LogSensitive, "log-sensitive", false, "enable sensitive logging (for debugging)")
 	flag.Parse()
 
-	config_files := flag.Args()
-	if len(config_files) == 0 {
+	configFiles := flag.Args()
+	if len(configFiles) == 0 {
 		w := flag.CommandLine.Output() // may be os.Stderr - but not necessarily
 		fmt.Fprintf(w, "usage: %s [...flags...] config_1.yaml ... config_n.yaml\n", os.Args[0])
 		flag.PrintDefaults()
@@ -43,7 +43,7 @@ func parseFlags() []string {
 
 	configureLogging(logLevel, logHumanReadable)
 
-	return config_files
+	return configFiles
 }
 
 func configureLogging(logLevel string, logHumanReadable bool) {

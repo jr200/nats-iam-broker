@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	internal "github.com/jr200/nats-iam-broker/internal"
 
@@ -13,9 +12,10 @@ import (
 
 // Struct definitions
 type Rbac struct {
-	Accounts    []UserAccountInfo `yaml:"user_accounts"`
-	RoleBinding []RoleBinding     `yaml:"role_binding"`
-	Roles       []Role            `yaml:"roles"`
+	Accounts       []UserAccountInfo `yaml:"user_accounts"`
+	RoleBinding    []RoleBinding     `yaml:"role_binding"`
+	Roles          []Role            `yaml:"roles"`
+	TokenMaxExpiry Duration          `yaml:"token_max_expiration"`
 }
 
 type UserAccountInfo struct {
@@ -25,14 +25,16 @@ type UserAccountInfo struct {
 }
 
 type RoleBinding struct {
-	Match   Match    `yaml:"match"`
-	Account string   `yaml:"user_account"`
-	Roles   []string `yaml:"roles"`
+	Account        string   `yaml:"user_account"`
+	Roles          []string `yaml:"roles"`
+	TokenMaxExpiry Duration `yaml:"token_max_expiration"`
+	Match          []Match  `yaml:"match"`
 }
 
 type Match struct {
-	Claim string `yaml:"claim,omitempty"`
-	Value string `yaml:"value,omitempty"`
+	Claim      string `yaml:"claim,omitempty"`
+	Value      string `yaml:"value,omitempty"`
+	Permission string `yaml:"permission,omitempty"`
 }
 
 type Role struct {
@@ -48,8 +50,8 @@ type Permissions struct {
 }
 
 type ResponsePermission struct {
-	MaxMsgs int           `yaml:"max"`
-	Expires time.Duration `yaml:"ttl"`
+	MaxMsgs int      `yaml:"max_msgs"`
+	Expires Duration `yaml:"exp"`
 }
 
 type Limits struct {
@@ -58,7 +60,6 @@ type Limits struct {
 }
 
 func (c *Config) lookupAccountInfo(userAccount string) (*UserAccountInfo, error) {
-
 	for _, acinfo := range c.Rbac.Accounts {
 		if acinfo.Name == userAccount {
 			return &acinfo, nil
@@ -68,46 +69,104 @@ func (c *Config) lookupAccountInfo(userAccount string) (*UserAccountInfo, error)
 	return nil, fmt.Errorf("unknown user-account: %s", userAccount)
 }
 
-func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt.Permissions, *jwt.Limits) {
-	for _, roleBinding := range c.Rbac.RoleBinding {
-		claimKey := roleBinding.Match.Claim
-		claimValue := roleBinding.Match.Value
-
-		contextValue, exists := context[claimKey]
-		if !exists {
-			log.Trace().Msgf("match-fail[%s]: claim key not found in context", claimKey)
-			continue
-		}
-
-		switch v := contextValue.(type) {
-		case string:
-			if v == claimValue {
-				log.Debug().Msgf("match-pass[%s]: %s == %s", claimKey, claimValue, v)
-				account := roleBinding.Account
-				permissions, limits := c.collateRoles(roleBinding.Roles)
-				return account, permissions, limits
-			}
-		case []interface{}:
-			for _, val := range v {
-				if val == claimValue {
-					log.Debug().Msgf("match-pass[%s]: %s == %s", claimKey, claimValue, val)
-					account := roleBinding.Account
-					permissions, limits := c.collateRoles(roleBinding.Roles)
-					return account, permissions, limits
-				}
-			}
-		default:
-			log.Trace().Msgf("match-fail[%s]: unsupported type %T", claimKey, v)
-		}
-		log.Trace().Msgf("match-fail[%s]: %s != %v", claimKey, claimValue, contextValue)
+func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt.Permissions, *jwt.Limits, Duration) {
+	type matchResult struct {
+		matches     int
+		account     string
+		permissions *jwt.Permissions
+		limits      *jwt.Limits
+		maxExpiry   Duration
+		roleBinding string
+		matchedOn   []string
 	}
 
-	log.Error().Msgf("no role-binding matched idp token, context=%v", context)
-	return "", nil, nil
+	var bestMatch matchResult
+
+	for _, roleBinding := range c.Rbac.RoleBinding {
+		currentMatches := 0
+		currentMatchedOn := []string{}
+
+		for _, match := range roleBinding.Match {
+			// Handle permission-based matching
+			if match.Permission != "" {
+				if permissions, ok := context["permissions"].([]interface{}); ok {
+					for _, p := range permissions {
+						if permission, ok := p.(string); ok && permission == match.Permission {
+							currentMatches++
+							currentMatchedOn = append(currentMatchedOn,
+								fmt.Sprintf("permission=%s", match.Permission))
+							log.Debug().Msgf("match-pass[permission]: %s", match.Permission)
+							break
+						}
+					}
+				} else if permission, ok := context["permissions"].(string); ok && permission == match.Permission {
+					currentMatches++
+					currentMatchedOn = append(currentMatchedOn,
+						fmt.Sprintf("permission=%s", match.Permission))
+					log.Debug().Msgf("match-pass[permission]: %s", match.Permission)
+				}
+				continue
+			}
+
+			// Handle regular claim-based matching
+			contextValue, exists := context[match.Claim]
+			if !exists {
+				log.Trace().Msgf("match-skip[%s]: claim key not found in context", match.Claim)
+				continue
+			}
+
+			switch v := contextValue.(type) {
+			case string:
+				if v == match.Value {
+					currentMatches++
+					currentMatchedOn = append(currentMatchedOn,
+						fmt.Sprintf("%s=%s", match.Claim, match.Value))
+					log.Debug().Msgf("match-pass[%s]: %s == %s", match.Claim, match.Value, v)
+				}
+			case []interface{}:
+				for _, val := range v {
+					if val == match.Value {
+						currentMatches++
+						currentMatchedOn = append(currentMatchedOn,
+							fmt.Sprintf("%s=%s", match.Claim, match.Value))
+						log.Debug().Msgf("match-pass[%s]: %s == %s", match.Claim, match.Value, val)
+						break
+					}
+				}
+			default:
+				log.Trace().Msgf("match-skip[%s]: unsupported type %T", match.Claim, v)
+			}
+		}
+
+		if currentMatches > bestMatch.matches {
+			permissions, limits := c.collateRoles(roleBinding.Roles)
+			bestMatch = matchResult{
+				matches:     currentMatches,
+				account:     roleBinding.Account,
+				permissions: permissions,
+				limits:      limits,
+				maxExpiry:   roleBinding.TokenMaxExpiry,
+				roleBinding: roleBinding.Account,
+				matchedOn:   currentMatchedOn,
+			}
+		}
+	}
+
+	if bestMatch.matches == 0 {
+		log.Error().Msgf("no role-binding matched idp token, context=%v", context)
+		return "", nil, nil, Duration{}
+	}
+
+	log.Debug().
+		Int("matches", bestMatch.matches).
+		Str("role_binding", bestMatch.roleBinding).
+		Strs("matched_on", bestMatch.matchedOn).
+		Msg("selected role binding with the most matches")
+
+	return bestMatch.account, bestMatch.permissions, bestMatch.limits, bestMatch.maxExpiry
 }
 
 func (c *Config) collateRoles(roles []string) (*jwt.Permissions, *jwt.Limits) {
-
 	allPermissions := jwt.Permissions{
 		Resp: &jwt.ResponsePermission{
 			Expires: 0,
@@ -168,8 +227,8 @@ func collatePermissions(base *jwt.Permissions, other *Permissions) {
 	base.Sub.Allow.Add(other.Sub.Allow...)
 	base.Sub.Deny.Add(other.Sub.Deny...)
 
-	if other.Resp.Expires > 0 {
-		base.Resp.Expires = other.Resp.Expires
+	if other.Resp.Expires.Duration > 0 {
+		base.Resp.Expires = other.Resp.Expires.Duration
 	}
 	if other.Resp.MaxMsgs > 0 {
 		base.Resp.MaxMsgs = other.Resp.MaxMsgs
@@ -177,7 +236,6 @@ func collatePermissions(base *jwt.Permissions, other *Permissions) {
 }
 
 func (c *Config) lookupRole(roleName string) *Role {
-
 	for _, role := range c.Rbac.Roles {
 		if role.Name == roleName {
 			return &role

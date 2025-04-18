@@ -12,6 +12,9 @@ data:
 
     nats:
       url: {{ .Values.config.app.nats.url }}
+      token_bounds:
+        min: {{ .Values.config.app.nats.jwtExpiry.min }}
+        max: {{ .Values.config.app.nats.jwtExpiry.max }}
 
     service:
       name: {{ .Values.config.app.name }}
@@ -30,6 +33,3 @@ data:
           {{- with .Values.config.app.natsMicroService.encryption.xkeySecret }}
           xkey_secret: {{ include "secretValue" (list .type .value) }}
           {{- end }}
-
-    nats_jwt:
-      exp_max: {{ .Values.config.app.nats.jwtExpiry }}
