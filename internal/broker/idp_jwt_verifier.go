@@ -146,8 +146,8 @@ func (v *IdpJwtVerifier) validateAgainstSpec(claims *IdpJwtClaims, spec IdpJwtVa
 		}
 	}
 
-	if spec.Expiry.Min.Duration != 0 && spec.Expiry.Max.Duration != 0 {
-		err := claims.validateExpiryBounds(spec.Expiry)
+	if spec.TokenExpiryBounds.Min.Duration > 0 || spec.TokenExpiryBounds.Max.Duration > 0 {
+		err := claims.validateExpiryBounds(spec.TokenExpiryBounds)
 		if err != nil {
 			return err
 		}

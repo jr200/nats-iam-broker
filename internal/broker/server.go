@@ -1,6 +1,12 @@
 package server
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
 	internal "github.com/jr200/nats-iam-broker/internal"
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nats.go"
@@ -12,8 +18,14 @@ import (
 
 func Start(configFiles []string, serverOpts *ServerOptions) error {
 	ctx := NewServerContext(serverOpts)
+	// This is reads the config from disk on server start. Downside with caching is that if the config
+	// is updated, the service will not pick it up until the service is restarted.
+	configManager, err := NewConfigManager(configFiles)
+	if err != nil {
+		return fmt.Errorf("failed to initialize config manager: %v", err)
+	}
 
-	config, err := readConfigFiles(configFiles, make(map[string]interface{}))
+	config, err := configManager.GetConfig(make(map[string]interface{}))
 	if err != nil {
 		log.Err(err).Msg("bad configuration")
 		return err
@@ -63,7 +75,8 @@ func Start(configFiles []string, serverOpts *ServerOptions) error {
 			log.Debug().Msgf("reqClaims: %v", reqClaims.toMap())
 		}
 
-		cfgForRequest, err := readConfigFiles(configFiles, reqClaims.toMap())
+		// Lets render the config with a different mapping:
+		cfgForRequest, err := configManager.GetConfig(reqClaims.toMap())
 		if err != nil {
 			log.Error().Err(err).Msg("error rendering config against idp-jwt")
 			return nil, nil, err

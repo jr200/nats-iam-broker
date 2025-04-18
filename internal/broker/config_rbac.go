@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	internal "github.com/jr200/nats-iam-broker/internal"
 
@@ -13,9 +12,10 @@ import (
 
 // Struct definitions
 type Rbac struct {
-	Accounts    []UserAccountInfo `yaml:"user_accounts"`
-	RoleBinding []RoleBinding     `yaml:"role_binding"`
-	Roles       []Role            `yaml:"roles"`
+	Accounts       []UserAccountInfo `yaml:"user_accounts"`
+	RoleBinding    []RoleBinding     `yaml:"role_binding"`
+	Roles          []Role            `yaml:"roles"`
+	TokenMaxExpiry Duration          `yaml:"token_max_expiration"`
 }
 
 type UserAccountInfo struct {
@@ -25,14 +25,16 @@ type UserAccountInfo struct {
 }
 
 type RoleBinding struct {
-	Match   Match    `yaml:"match"`
-	Account string   `yaml:"user_account"`
-	Roles   []string `yaml:"roles"`
+	Account        string   `yaml:"user_account"`
+	Roles          []string `yaml:"roles"`
+	TokenMaxExpiry Duration `yaml:"token_max_expiration"`
+	Match          []Match  `yaml:"match"`
 }
 
 type Match struct {
-	Claim string `yaml:"claim,omitempty"`
-	Value string `yaml:"value,omitempty"`
+	Claim      string `yaml:"claim,omitempty"`
+	Value      string `yaml:"value,omitempty"`
+	Permission string `yaml:"permission,omitempty"`
 }
 
 type Role struct {
@@ -48,8 +50,8 @@ type Permissions struct {
 }
 
 type ResponsePermission struct {
-	MaxMsgs int           `yaml:"max"`
-	Expires time.Duration `yaml:"ttl"`
+	MaxMsgs int      `yaml:"max_msgs"`
+	Expires Duration `yaml:"exp"`
 }
 
 type Limits struct {
@@ -166,8 +168,8 @@ func collatePermissions(base *jwt.Permissions, other *Permissions) {
 	base.Sub.Allow.Add(other.Sub.Allow...)
 	base.Sub.Deny.Add(other.Sub.Deny...)
 
-	if other.Resp.Expires > 0 {
-		base.Resp.Expires = other.Resp.Expires
+	if other.Resp.Expires.Duration > 0 {
+		base.Resp.Expires = other.Resp.Expires.Duration
 	}
 	if other.Resp.MaxMsgs > 0 {
 		base.Resp.MaxMsgs = other.Resp.MaxMsgs
