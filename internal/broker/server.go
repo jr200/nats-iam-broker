@@ -61,6 +61,8 @@ func Start(configFiles []string, serverOpts *ServerOptions) error {
 		return err
 	}
 
+	auditEventSubject := config.Service.Name + ".evt.audit.account.%s.user.%s.created"
+	log.Info().Msgf("Audit events will be published to: %s", strings.Replace(auditEventSubject, "%s", "*", 2))
 
 	auth := NewAuthService(ctx, config.Service.Account.SigningNKey.KeyPair, config.serviceEncryptionXkey(), func(request *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error) {
 		log.Trace().Msgf("NewAuthService (request): %s", request)
@@ -114,6 +116,38 @@ func Start(configFiles []string, serverOpts *ServerOptions) error {
 		signingKeyInfo, err := determineSigningKeyType(claims, userAccountInfo.SigningNKey.KeyPair, userAccountInfo)
 		if err != nil {
 			log.Warn().Err(err).Msg("failed to determine signing key type for audit event")
+		}
+
+		// Publish user creation event with detailed information
+		userEvent := map[string]interface{}{
+			"account":          userAccountName,
+			"account_pub_nkey": userAccountInfo.PublicKey,
+			"user_pub_nkey":    request.UserNkey,
+			"username":         request.ConnectOptions.Username,
+			"email":            reqClaims.Email,
+			"name":             reqClaims.Name,
+			"idp":              matchedVerifier.config.Description,
+			"created_at":       time.Now().Format(time.RFC3339),
+			"expires_at":       time.Unix(claims.Expires, 0).Format(time.RFC3339),
+			"permissions":      permissions,
+			"limits":           limits,
+			"signing_account":  config.Service.Account.Name,
+		}
+
+		// Add signing key information if available
+		if signingKeyInfo != nil {
+			userEvent["signing_key_type"] = signingKeyInfo.Type
+			userEvent["signing_key_pub_nkey"] = signingKeyInfo.PublicKey
+		}
+
+		eventJSON, err := json.Marshal(userEvent)
+		if err != nil {
+			log.Warn().Err(err).Msg("failed to marshal user creation event")
+		} else {
+			err = nc.Publish(fmt.Sprintf(auditEventSubject, userAccountName, request.UserNkey), eventJSON)
+			if err != nil {
+				log.Warn().Err(err).Msg("failed to publish user creation event")
+			}
 		}
 
 	log.Info().Msgf("Starting service v%s", config.Service.Version)
