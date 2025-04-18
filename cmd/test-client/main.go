@@ -16,6 +16,59 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// TestCase defines the available test cases.
+type TestCase int
+
+const (
+	Sub TestCase = iota
+	Pub
+	PubSub
+	Stream
+)
+
+// Required argument counts for each test case
+const (
+	SubReqArgs    = 1 // Subject
+	PubReqArgs    = 2 // Subject and message
+	PubSubReqArgs = 2 // Subject and message
+	StreamReqArgs = 2 // Stream name and subject
+)
+
+// String returns the string representation of a TestCase.
+func (tc TestCase) String() string {
+	return [...]string{"sub", "pub", "pubsub", "stream"}[tc]
+}
+
+// ParseTestCase converts a string to a TestCase.
+func ParseTestCase(s string) (TestCase, error) {
+	switch s {
+	case "sub":
+		return Sub, nil
+	case "pub":
+		return Pub, nil
+	case "pubsub":
+		return PubSub, nil
+	case "stream":
+		return Stream, nil
+	default:
+		return 0, fmt.Errorf("invalid test case: %s", s)
+	}
+}
+
+// AllTestCases returns all available test cases.
+func AllTestCases() []TestCase {
+	return []TestCase{Sub, Pub, PubSub, Stream}
+}
+
+// ListTestCases returns a comma-separated string of all test cases.
+func ListTestCases() string {
+	var cases []string
+	for _, tc := range AllTestCases() {
+		cases = append(cases, tc.String())
+	}
+	return strings.Join(cases, ", ")
+}
+
 func main() {
 	err := run()
 	if err != nil {
@@ -43,7 +96,7 @@ func run() error {
 		natsURL     string
 		credsFile   string
 		idpJwt      string
-		testCase    string
+		testCaseStr string
 		clientSleep int64
 	)
 
@@ -52,7 +105,7 @@ func run() error {
 	flag.StringVar(&credsFile, "creds", "", "NATS credentials file")
 	flag.StringVar(&idpJwt, "jwt", "", "IdP id_token JWT")
 	flag.Int64Var(&clientSleep, "wait", 1, "seconds to wait for client to exit (default=1)")
-	flag.StringVar(&testCase, "run-test", "", "nats test run")
+	flag.StringVar(&testCaseStr, "run-test", "", fmt.Sprintf("nats test to run (%s)", ListTestCases()))
 
 	flag.Parse()
 	configureLogging(logLevel, true)
@@ -79,8 +132,10 @@ func run() error {
 
 	log.Info().Msgf("successful connection to %s", nc.ConnectedUrl())
 
-	if testCase != "" {
-		testErr := runTestCase(nc, testCase)
+	if testCaseStr != "" {
+		// Get remaining positional arguments
+		testArgs := flag.Args()
+		testErr := runTestCase(nc, testCaseStr, testArgs)
 		time.Sleep(time.Duration(clientSleep) * time.Second)
 
 		switch {
@@ -100,18 +155,27 @@ func run() error {
 	return nil
 }
 
-func runTestCase(nc *nats.Conn, testCase string) error {
-	tokens := strings.Fields(testCase)
+func runTestCase(nc *nats.Conn, testCaseStr string, args []string) error {
+	log.Info().Msgf("test-case type: %s, args: %v", testCaseStr, args)
 
-	if len(tokens) == 0 {
+	if testCaseStr == "" {
 		log.Trace().Msg("no test to run")
+		return nil
+	}
+
+	testCase, err := ParseTestCase(testCaseStr)
+	if err != nil {
+		return fmt.Errorf("%v. Valid cases are: %s", err, ListTestCases())
 	}
 
 	log.Info().Msgf("running test-case: %s", testCase)
 
-	switch tokens[0] {
-	case "sub":
-		ns, err := nc.Subscribe(tokens[1], func(msg *nats.Msg) {
+	switch testCase {
+	case Sub:
+		if len(args) < SubReqArgs {
+			return errors.New("sub test requires a subject")
+		}
+		ns, err := nc.Subscribe(args[0], func(msg *nats.Msg) {
 			log.Info().Msgf("got-msg: %s", msg.Data)
 			_ = msg.Ack()
 		})
@@ -126,14 +190,20 @@ func runTestCase(nc *nats.Conn, testCase string) error {
 
 		log.Info().Msgf("subscribed ok: %v", ns)
 
-	case "pub":
-		err := nc.Publish(tokens[1], []byte(tokens[2]))
+	case Pub:
+		if len(args) < PubReqArgs {
+			return errors.New("pub test requires a subject and a message")
+		}
+		err := nc.Publish(args[0], []byte(args[1]))
 		if err != nil {
 			return err
 		}
 
-	case "pubsub":
-		_, err := nc.Subscribe(tokens[1], func(msg *nats.Msg) {
+	case PubSub:
+		if len(args) < PubSubReqArgs {
+			return errors.New("pubsub test requires a subject and a message")
+		}
+		_, err := nc.Subscribe(args[0], func(msg *nats.Msg) {
 			log.Info().Msgf("got-msg: %s", msg.Data)
 			_ = msg.Ack()
 		})
@@ -141,14 +211,17 @@ func runTestCase(nc *nats.Conn, testCase string) error {
 			return err
 		}
 
-		err = nc.Publish(tokens[1], []byte(tokens[2]))
+		err = nc.Publish(args[0], []byte(args[1]))
 		if err != nil {
 			return err
 		}
 
-	case "stream":
-		streamName := tokens[1]
-		subject := tokens[2]
+	case Stream:
+		if len(args) < StreamReqArgs {
+			return errors.New("stream test requires a stream name and a subject")
+		}
+		streamName := args[0]
+		subject := args[1]
 		js, err := jetstream.New(nc)
 		if err != nil {
 			return err
@@ -169,7 +242,7 @@ func runTestCase(nc *nats.Conn, testCase string) error {
 			return err
 		}
 	default:
-		return fmt.Errorf("bad test-case: %s", tokens[0])
+		return fmt.Errorf("unknown test-case logic error: %s", testCase)
 	}
 
 	return nil
