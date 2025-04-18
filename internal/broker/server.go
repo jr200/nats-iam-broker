@@ -61,15 +61,19 @@ func Start(configFiles []string, serverOpts *ServerOptions) error {
 		return err
 	}
 
-	auth := NewAuthService(ctx, config.Service.Account.SigningNKey.KeyPair, config.serviceEncryptionXkey(), func(request *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, error) {
+
+	auth := NewAuthService(ctx, config.Service.Account.SigningNKey.KeyPair, config.serviceEncryptionXkey(), func(request *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error) {
 		log.Trace().Msgf("NewAuthService (request): %s", request)
 
-		idpJwt := request.ConnectOptions.Password
 
-		reqClaims, err := runVerification(idpJwt, idpVerifiers)
+		reqClaims, matchedVerifier, err := runVerification(idpRawJwt, idpVerifiers)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
+
+		// Merge in client information from the request
+		reqJwtClaims := reqClaims.toMap()
+		reqClaims.fromMap(reqJwtClaims, matchedVerifier.config.CustomMapping)
 
 		if ctx.Options.LogSensitive {
 			log.Debug().Msgf("reqClaims: %v", reqClaims.toMap())
@@ -93,6 +97,7 @@ func Start(configFiles []string, serverOpts *ServerOptions) error {
 
 		// setup claims for user's nats-jwt
 		claims := jwt.NewUserClaims(request.UserNkey)
+		claims.Audience = userAccountName
 		claims.Name = request.ConnectOptions.Username
 		claims.IssuerAccount = userAccountInfo.PublicKey
 

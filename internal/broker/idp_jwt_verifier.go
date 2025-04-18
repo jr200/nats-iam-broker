@@ -3,10 +3,12 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/oauth2"
 )
 
 type IdpAndJwtVerifier struct {
@@ -79,27 +81,38 @@ type IdpJwtVerifier struct {
 
 // Verifies that the ID token was signed by idp and is valid.
 // Returns the claims embedded with the token
-func (v *IdpJwtVerifier) verifyJWT(token string) (*IdpJwtClaims, error) {
+func (v *IdpJwtVerifier) verifyJWT(token string, customMapping map[string]string) (*IdpJwtClaims, *oidc.IDToken, error) {
+	claims := &IdpJwtClaims{}
+
 	if v.ctx.Options.LogSensitive {
 		log.Trace().Msgf("VerifyJWT %s", token)
 	}
-	claims := &IdpJwtClaims{}
 
 	idToken, err := v.Verify(context.Background(), token)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	if err := idToken.Claims(claims); err != nil {
-		return nil, err
+	// First get all claims as a map
+	var rawClaims map[string]interface{}
+	if err := idToken.Claims(&rawClaims); err != nil {
+		return nil, nil, err
 	}
+
+	// Then convert to our claims struct
+	if err := idToken.Claims(claims); err != nil {
+		return nil, nil, err
+	}
+
+	// Store all claims in CustomClaims using the custom mapping
+	claims.fromMap(rawClaims, customMapping)
 
 	err = v.ValidateTimes(idToken.IssuedAt, idToken.Expiry)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return claims, nil
+	return claims, idToken, nil
 }
 
 func (v *IdpJwtVerifier) ValidateTimes(issuedAt time.Time, expiry time.Time) error {
@@ -138,7 +151,9 @@ func (v *IdpJwtVerifier) validateAgainstSpec(claims *IdpJwtClaims, spec IdpJwtVa
 		}
 	}
 
-	if spec.Audience != nil {
+	if spec.SkipAudienceValidation || spec.Audience == nil || len(spec.Audience) == 0 {
+		// Skip audience validation if explicitly disabled or no audience configured
+	} else {
 		err := claims.validateAudience(spec.Audience)
 		if err != nil {
 			log.Error().Err(err).Msgf("failed audience check: %v", spec.Audience)
