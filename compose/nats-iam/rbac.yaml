@@ -1,0 +1,70 @@
+rbac:
+  user_accounts:
+    - name: '{{ env "$APP_ACCT_1" }}'
+      public_key: '{{ readFile "$IAM_ACCT_ID_1" | trim }}'
+      signing_nkey: '{{ readFile "$IAM_ACCT_SK_1" }}'
+
+  role_binding:
+    - match: { claim: preferred_username, value: 'cryptoadmin' }
+      user_account: '{{ env "$APP_ACCT_1" }}'
+      roles:
+        - can-pubsub
+        - streaming
+
+    # - match: { claim: aud, value: public }
+    #   user_account: '{{ env "$APP_ACCT_1" }}'
+    #   roles:
+    #     - can-pubsub
+    #     - streaming
+
+  roles:
+    - name: can-pubsub
+      permissions:
+        pub:
+          allow:
+            - basic.{{ .preferred_username }}
+            - basic.{{ b64encode .sub }}
+        sub:
+          allow:
+            - basic.{{ .preferred_username }}
+            - basic.*.{{ b64encode .sub }}
+
+    - name: can-api
+      permissions:
+        pub:
+          allow:
+            - basic.api.>
+        sub:
+          allow:
+            - basic.api.>
+
+    - name: streaming
+      permissions:
+        sub:
+          allow:
+            - "$JS.API.>"
+            - "_INBOX.>"
+        pub:
+          allow:
+            - "$JS.API.STREAM.CREATE.basic_test_stream"
+            - "$JS.API.STREAM.UPDATE.basic_test_stream"
+            - "$JS.API.CONSUMER.CREATE.basic_test_stream.basic_test_stream"
+            - "$JS.API.CONSUMER.MSG.NEXT.basic_test_stream.basic_test_stream"
+        resp:
+          max: 1
+          ttl: 1h
+
+      limits:
+        data: 65536
+
+    - name: kv
+      permissions:
+        sub:
+          allow:
+            - "$KV.>"
+
+    - name: object-store
+      permissions:
+        sub:
+          allow:
+            - "$OBJ.>"

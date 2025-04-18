@@ -1,0 +1,30 @@
+services:
+
+  nats-iam:
+    # https://github.com/jr200/nats-iam-broker/pkgs/container/nats-iam-broker
+    image: ghcr.io/jr200/nats-iam-broker:v0.2.0
+    restart: unless-stopped
+    volumes:
+    - ./nats-iam/rbac.yaml:/config/30-rbac.yaml
+    - ./nats-secrets:/secrets
+    networks:
+      - infra-public
+    command: >
+      -log trace 
+      -log-human
+    environment:
+      # assumes zitadel and nats are containers connected to infra-public
+      # exposed on ports 8080 and 4222 externally
+      IAM_PORT_FORWARDS: zitadel:8080:8888,nats:4222:4222
+      IAM_ACCOUNT_NAME: MYAPP-MINT
+      IAM_VERSION: 0.1.0
+
+      IDP_ISSUER_URL: "http://localhost:8888"
+      IDP_CLIENT_ID: "311866328405311492"
+
+      # APP public and signing keys
+      APP_AUTO_ACCOUNTS: MYAPP
+
+networks:
+  infra-public:
+    external: true

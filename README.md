@@ -105,12 +105,63 @@ This example demonstates a simpler setup consisting of:
 
 As in the previous example, authorised NATS users are created and signed on-the-fly, following successful validation of the IdP token.
 
+
 ## Setup
 
-The application is intended to be deployed as either:
+This section describes some (probably common) deployment methods:
 
 - a single golang binary plus a (mergable set of) YAML configuration file(s).
+- a docker/podman compose file.
 - a helm-chart, see [charts/nats-iam-broker/README.md](https://github.com/jr200/nats-iam-broker/tree/main/charts/nats-iam-broker/README.md).
+
+## Docker/Podman Compose Setup
+
+NATS accounts must be created locally (with access to keys) and then pushed to the target NATS server.
+This section is intended as an example/rough-guide and assumes the NATS infrastructure as described in the [nats-infra](https://github.com/jr200/nats-infra/tree/main) repo is up and running.
+
+1. Create the `MYAPP-MINT` auth-callout account.
+
+```bash
+export OPERATOR_NAME=local-operator
+export ACCOUNT_NAME=MYAPP-MINT
+export NATS_CONTAINER=infra-team-nats-1
+export NSC_CONTAINER=infra-team-nsc-admin-1
+export OUTPUT_DIR=./nats-secrets
+
+echo Creating account $ACCOUNT_NAME
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/jr200/nats-infra/main/scripts/nats-create-account.sh)"
+
+echo Enabling auth-callout for $ACCOUNT_NAME
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/jr200/nats-infra/main/scripts/nats-enable-auth-callout.sh)"
+
+echo Fetching signing keys for $ACCOUNT_NAME
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/jr200/nats-infra/main/scripts/nats-fetch-signing-creds.sh)"
+```
+
+2. Create the `MYAPP` account
+
+```bash
+export OPERATOR_NAME=local-operator
+export ACCOUNT_NAME=MYAPP
+export NATS_CONTAINER=infra-team-nats-1
+export NSC_CONTAINER=infra-team-nsc-admin-1
+export OUTPUT_DIR=./nats-secrets
+
+echo Creating account $ACCOUNT_NAME
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/jr200/nats-infra/main/scripts/nats-create-account.sh)"
+
+echo Fetching signing keys for $ACCOUNT_NAME
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/jr200/nats-infra/main/scripts/nats-fetch-signing-creds.sh)"
+```
+
+3. Start the nats-iam broker instance
+
+```
+podman compose -f compose-iam.yml -p dev-team up -d
+```
+
+
+## Kubernetes Setup
 
 Standard go templating is used to construct roles dynamically. Templating functions are listed in the `filters` module.
 

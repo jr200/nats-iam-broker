@@ -1,0 +1,22 @@
+params:
+  left_delim: "{{"
+  right_delim: "}}"
+
+nats:
+  url: '{{ env "NATS_URL" }}'
+
+service:
+  name: '{{ env "IAM_NAME" }}'
+  version: '{{ env "IAM_VERSION" }}'
+  description: '{{ env "IAM_DESCRIPTION" }}'
+  creds_file: '{{ env "IAM_USER_CREDS" }}'
+
+  account:
+    name: '{{ env "IAM_ACCOUNT_NAME" }}'
+    signing_nkey: '{{ readFile "$IAM_ACCOUNT_SIGNK" }}'
+    encryption:
+      enabled: true
+      xkey_secret: '{{ readNthLine 1 (env "IAM_SERVICE_XK") }}'
+
+nats_jwt:
+  exp_max: '{{ env "IAM_JWT_EXP" }}'
