@@ -79,13 +79,12 @@ func Start(configFiles []string, serverOpts *ServerOptions) error {
 		cfgForRequest, err := configManager.GetConfig(reqClaims.toMap())
 		if err != nil {
 			log.Error().Err(err).Msg("error rendering config against idp-jwt")
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-
-		userAccountName, permissions, limits := cfgForRequest.lookupUserAccount(reqClaims.toMap())
+		userAccountName, permissions, limits, roleBindingTokenMaxExpiry := cfgForRequest.lookupUserAccount(reqClaims.toMap())
 		userAccountInfo, err := config.lookupAccountInfo(userAccountName)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 
 		if ctx.Options.LogSensitive {
@@ -96,7 +95,13 @@ func Start(configFiles []string, serverOpts *ServerOptions) error {
 		claims := jwt.NewUserClaims(request.UserNkey)
 		claims.Name = request.ConnectOptions.Username
 		claims.IssuerAccount = userAccountInfo.PublicKey
-		claims.Expires = reqClaims.Expiry
+
+		claims.Expires = calculateExpiration(
+			cfgForRequest,    // NatsJwt ExpiryBounds and RBAC TokenMaxExpiry
+			reqClaims.Expiry, // IDP Max Expiry
+			&matchedVerifier.config.ValidationSpec.TokenExpiryBounds, // IDP ValidationSpec
+			&roleBindingTokenMaxExpiry,                               // RoleBinding TokenMaxExpiry
+		)
 		claims.Permissions = *permissions
 		claims.Limits = *limits
 	log.Info().Msgf("Starting service v%s", config.Service.Version)
@@ -121,4 +126,55 @@ func Start(configFiles []string, serverOpts *ServerOptions) error {
 
 	log.Info().Msg("Exiting...")
 	return nil
+}
+
+func calculateExpiration(cfg *Config, idpProvidedExpiry int64, idpValidationExpiry *DurationBounds, roleBindingTokenMaxExpiry *Duration) int64 {
+	// Token expiration is calculated from the following sources, in order of precedence:
+	// 1. IDP ValidationSpec. This is the expiration time set by the IDP.
+	// 2. (Optional) IDP ValidationSpec.TokenExpiryBounds. This is the outer bounds that can be set per IDP.
+	// 3. (Optional) RoleBinding TokenMaxExpiry. This is the expiration time set by the RoleBinding.
+	//    Overrides RBAC TokenMaxExpiry. Both up and down to the bounds set by NatsJwt.TokenExpiryBounds.
+	// 4. (Optional) RBAC TokenMaxExpiry. Default expiration time set by the RBAC as the Max expiration time for a token.
+	// 5. NatsJwt.TokenExpiryBounds is the outer bounds that can be set in the config.
+
+	now := time.Now()
+
+	// 1. Start with IDP provided expiry
+	expiry := idpProvidedExpiry
+
+	// TODO: Is it allowed to have a token that is higher than the IDP provided max expiry?
+
+	// 2. Apply idpValidation bounds
+	if idpValidationExpiry != nil {
+		if idpValidationExpiry.Min.Duration > 0 {
+			if expiry < now.Add(idpValidationExpiry.Min.Duration).Unix() {
+				expiry = now.Add(idpValidationExpiry.Min.Duration).Unix()
+			}
+		}
+		if idpValidationExpiry.Max.Duration > 0 {
+			if expiry > now.Add(idpValidationExpiry.Max.Duration).Unix() {
+				expiry = now.Add(idpValidationExpiry.Max.Duration).Unix()
+			}
+		}
+	}
+
+	// 3. Apply role binding expiry if set
+	if roleBindingTokenMaxExpiry != nil && roleBindingTokenMaxExpiry.Duration > 0 {
+		expiry = now.Add(roleBindingTokenMaxExpiry.Duration).Unix()
+	} else if cfg.Rbac.TokenMaxExpiry.Duration > 0 {
+		// 4. Apply RBAC bounds
+		if expiry > now.Add(cfg.Rbac.TokenMaxExpiry.Duration).Unix() {
+			expiry = now.Add(cfg.Rbac.TokenMaxExpiry.Duration).Unix()
+		}
+	}
+
+	// Make sure that the expiry is within the bounds
+	if expiry < now.Add(cfg.NATS.TokenExpiryBounds.Min.Duration).Unix() {
+		expiry = now.Add(cfg.NATS.TokenExpiryBounds.Min.Duration).Unix()
+	}
+	if expiry > now.Add(cfg.NATS.TokenExpiryBounds.Max.Duration).Unix() {
+		expiry = now.Add(cfg.NATS.TokenExpiryBounds.Max.Duration).Unix()
+	}
+
+	return expiry
 }
