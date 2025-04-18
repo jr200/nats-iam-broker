@@ -130,6 +130,7 @@ The configuration structure is outlined here.
 | `nats_jwt.exp_max`                       | `duration`                                                              | maximum duration of minted nats user-jwt                                                                 |
 | `idp.client_id`                          | `string`                                                                | the client identifier registered with the IdP                                                            |
 | `idp.issuer_url`                         | `string`                                                                | the url of the IdP issuer                                                                                |
+| `idp.custom_mapping`                     | `map[string]string`                                                     | maps custom IDP claim names to standardized claim names (e.g. `"https://example.com/claims/roles": "roles"`) |
 | `idp.validation.claims`                  | `[]string`                                                              | set of required claims on idp token                                                                      |
 | `idp.validation.aud`                     | `[]string`                                                              | set of allowed values for _audience_ claim                                                               |
 | `idp.validation.exp.min`                 | `duration`                                                              | minimum time to expiry for idp token from _now_                                                          |
@@ -146,6 +147,90 @@ The configuration structure is outlined here.
 | `rbac.role_binding[i].roles`             | `[]string`                                                              | set of roles to bind                                                                                     |
 | `rbac.role_binding[i].match.claim`       | `string`                                                                | name of IdP JWT claim to match on                                                                        |
 | `rbac.role_binding[i].match.value`       | `string`                                                                | corresponding value of IdP JWT claim to match on                                                         |
+
+## Custom Claim Mapping
+
+The `custom_mapping` feature allows you to map custom claim names from your IDP's JWT tokens to standardized claim names in the NATS IAM broker. This is particularly useful when working with IDPs that use custom claim names or URL-based claims.
+
+### How it works
+
+- You can map any custom claim name from your IDP to any standardized name you prefer
+- The mapping is flexible and supports any claim name that appears in your IDP's JWT tokens
+- Standard claims (like "name", "email", "sub", etc.) cannot be mapped as they are handled separately by the system
+- If a claim isn't mapped, it will be stored with its original name in the `CustomClaims` map
+
+### Example
+
+```yaml
+idp:
+  - description: My-Custom-IDP
+    client_id: "my-client-id"
+    issuer_url: "https://my-idp.example.com"
+    custom_mapping:
+      "https://mycompany.com/claims/department": "department"
+      "https://mycompany.com/claims/employee_id": "employee_id"
+      "https://mycompany.com/claims/access_level": "access_level"
+      "https://mycompany.com/claims/roles": "roles"
+      "https://mycompany.com/claims/groups": "groups"
+```
+
+In this example:
+- The custom URL-based claim `https://mycompany.com/claims/department` will be mapped to `department`
+- The custom URL-based claim `https://mycompany.com/claims/employee_id` will be mapped to `employee_id`
+- The custom URL-based claim `https://mycompany.com/claims/access_level` will be mapped to `access_level`
+- The custom URL-based claims for roles and groups are mapped to their standard names
+
+These mapped claims can then be used in your RBAC configuration and role bindings.
+
+### Unmapped Claims
+
+When a claim is not explicitly mapped in the `custom_mapping` configuration, it will be stored with its original name in the `CustomClaims` map. This is useful when you want to preserve the original claim names or when you don't need to standardize certain claims.
+
+For example, if your IDP JWT contains these claims:
+
+```json
+{
+  "email": "user@example.com",
+  "https://mycompany.com/claims/department": "engineering",
+  "https://mycompany.com/claims/employee_id": "12345",
+  "https://mycompany.com/claims/access_level": "admin",
+  "https://mycompany.com/claims/roles": ["developer", "admin"],
+  "https://mycompany.com/claims/groups": ["team-a", "team-b"],
+  "https://mycompany.com/claims/custom_field": "custom value"
+}
+```
+
+And your configuration only maps some of them:
+
+```yaml
+idp:
+  - description: My-Custom-IDP
+    client_id: "my-client-id"
+    issuer_url: "https://my-idp.example.com"
+    custom_mapping:
+      "https://mycompany.com/claims/department": "department"
+      "https://mycompany.com/claims/employee_id": "employee_id"
+      "https://mycompany.com/claims/roles": "roles"
+      "https://mycompany.com/claims/groups": "groups"
+```
+
+The resulting claims in the NATS IAM broker will be:
+
+```json
+{
+  "email": "user@example.com",
+  "department": "engineering",
+  "employee_id": "12345",
+  "roles": ["developer", "admin"],
+  "groups": ["team-a", "team-b"],
+  "https://mycompany.com/claims/access_level": "admin",
+  "https://mycompany.com/claims/custom_field": "custom value"
+}
+```
+
+Notice that:
+- `https://mycompany.com/claims/access_level` and `https://mycompany.com/claims/custom_field` retain their original names because they weren't explicitly mapped
+- The mapped claims (`department`, `employee_id`, `roles`, `groups`) use their standardized names
 
 # References
 
