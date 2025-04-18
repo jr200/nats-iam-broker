@@ -1,0 +1,17 @@
+idp:
+  - description: '{{ env "IDP_DESCRIPTION" }}'
+    client_id: '{{ env "IDP_CLIENT_ID" }}'
+    issuer_url: '{{ env "IDP_ISSUER_URL" }}'
+
+    validation:
+      claims:
+        - aud
+        - iat
+        - exp
+        - preferred_username
+        - sub
+      aud:
+        - '{{ env "IDP_CLIENT_ID" }}'
+      exp:
+        min: 1m0s
+        max: 43800h
