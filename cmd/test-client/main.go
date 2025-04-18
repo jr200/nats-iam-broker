@@ -96,6 +96,7 @@ func run() error {
 		natsURL     string
 		credsFile   string
 		idpJwt      string
+		token       string
 		testCaseStr string
 		clientSleep int64
 	)
@@ -104,6 +105,7 @@ func run() error {
 	flag.StringVar(&natsURL, "url", nats.DefaultURL, "NATS URL")
 	flag.StringVar(&credsFile, "creds", "", "NATS credentials file")
 	flag.StringVar(&idpJwt, "jwt", "", "IdP id_token JWT")
+	flag.StringVar(&token, "token", "", "IdP authentication id_token JWT (overrides JWT if both are provided)")
 	flag.Int64Var(&clientSleep, "wait", 1, "seconds to wait for client to exit (default=1)")
 	flag.StringVar(&testCaseStr, "run-test", "", fmt.Sprintf("nats test to run (%s)", ListTestCases()))
 
@@ -112,17 +114,42 @@ func run() error {
 
 	log.Info().Msgf("connecting to %s", natsURL)
 	log.Trace().Msgf("sending jwt %s", idpJwt)
+	if token != "" {
+		log.Trace().Msg("using authentication token")
+	}
 
 	var natsErr = false
 
+	options := []nats.Option{
+		nats.LameDuckModeHandler(func(_ *nats.Conn) {
+			log.Info().Msg("Incoming Event, LDM. Client has been requested to reconnect")
+		}),
+		nats.ReconnectHandler(func(_ *nats.Conn) {
+			log.Info().Msg("nats client reconnected")
+		}),
+		nats.ConnectHandler(func(_ *nats.Conn) {
+			log.Info().Msg("nats client connected")
+		}),
+		nats.Name("test-client"),
+		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
+			log.Err(err).Msg("received nats-error")
+			natsErr = true
+		}),
+	}
+
+	if credsFile != "" {
+		options = append(options, nats.UserCredentials(credsFile))
+	}
+
+	if token != "" {
+		options = append(options, nats.Token(token))
+	} else if idpJwt != "" {
+		options = append(options, nats.Token(idpJwt))
+	}
+
 	nc, err := nats.Connect(
 		natsURL,
-		nats.UserCredentials(credsFile),
-		nats.UserInfo("jwt", idpJwt),
-		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
-			natsErr = true
-			log.Err(err).Msgf("received nats-error")
-		}),
+		options...,
 	)
 
 	if err != nil {
