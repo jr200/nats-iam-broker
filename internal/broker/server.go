@@ -104,6 +104,13 @@ func Start(configFiles []string, serverOpts *ServerOptions) error {
 		)
 		claims.Permissions = *permissions
 		claims.Limits = *limits
+
+		// Determine the type of signing key used
+		signingKeyInfo, err := determineSigningKeyType(claims, userAccountInfo.SigningNKey.KeyPair, userAccountInfo)
+		if err != nil {
+			log.Warn().Err(err).Msg("failed to determine signing key type for audit event")
+		}
+
 	log.Info().Msgf("Starting service v%s", config.Service.Version)
 
 	_, err = micro.AddService(nc, micro.Config{
