@@ -68,7 +68,9 @@ func Start(configFiles []string, serverOpts *ServerOptions) error {
 		var tokenReq TokenRequest
 		var idpRawJwt string
 
-		log.Trace().Msgf("NewAuthService (request): %s", request)
+		if ctx.Options.LogSensitive {
+			log.Trace().Msgf("NewAuthService (request): %s", request)
+		}
 
 		if request.ConnectOptions.Token != "" {
 			// Try to parse as JSON token response first
