@@ -22,12 +22,19 @@ type IdpAndJwtVerifier struct {
 
 func NewIdpVerifiers(ctx *ServerContext, config *Config) ([]IdpAndJwtVerifier, error) {
 	idpVerifiers := make([]IdpAndJwtVerifier, 0, len(config.Idp))
-	for _, idp := range config.Idp {
+	for i := range config.Idp {
+		idp := &config.Idp[i] // Use a pointer to the IDP config
 		idpVerifier, err := NewJwtVerifier(ctx, idp.ClientID, idp.IssuerURL)
 		if err != nil {
-			return nil, err
+			if idp.IgnoreSetupError {
+				log.Warn().Err(err).Str("issuer_url", idp.IssuerURL).Str("client_id", idp.ClientID).Msg("Failed to setup IDP verifier, ignoring due to config")
+				continue // Skip this IDP and continue with the next one
+			} else {
+				log.Error().Err(err).Str("issuer_url", idp.IssuerURL).Str("client_id", idp.ClientID).Msg("Failed to setup IDP verifier, halting startup")
+				return nil, fmt.Errorf("failed to setup verifier for IDP %s (%s): %w", idp.Description, idp.IssuerURL, err)
+			}
 		}
-		idpVerifiers = append(idpVerifiers, IdpAndJwtVerifier{idpVerifier, &idp})
+		idpVerifiers = append(idpVerifiers, IdpAndJwtVerifier{idpVerifier, idp}) // Pass the pointer to the config
 	}
 	return idpVerifiers, nil
 }

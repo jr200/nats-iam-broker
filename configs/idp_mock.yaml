@@ -2,6 +2,7 @@ idp:
   - description: mockoidc-local
     client_id: mockclientid
     issuer_url: http://127.0.0.1:5550/oidc
+    ignore_setup_error: true # <<< Set this to true to ignore errors when the mock server is not running
 
     validation:
       claims:

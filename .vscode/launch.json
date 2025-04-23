@@ -24,6 +24,7 @@
                 "${workspaceFolder}/configs/env_minter.yaml",
                 "${workspaceFolder}/configs/idp_private.yaml",
                 "${workspaceFolder}/configs/idp_public.yaml",
+                "${workspaceFolder}/configs/idp_mock.yaml",
                 "${workspaceFolder}/examples/basic/rbac.yaml"
             ],
             "env": {

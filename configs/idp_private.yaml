@@ -27,3 +27,17 @@ idp:
         - sub
       aud:
         - random-aud
+
+  - description: "My Secondary IDP (can sometimes be unavailable)"
+    issuer_url: "https://secondary-idp.internal:8443/"
+    client_id: "secondary-client"
+    ignore_setup_error: true # <<< Set this to true to block it from halting startup if it's unavailable
+    validation:
+      aud: ["secondary-aud"]
+
+  - description: "Development IDP (ignore if misconfigured)"
+    issuer_url: "http://localhost:8080/auth/realms/dev"
+    client_id: "dev-client"
+    ignore_setup_error: true # <<< Also ignore errors for this one when it is misconfigured
+    validation:
+      skip_audience_validation: true

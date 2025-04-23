@@ -67,6 +67,7 @@ type Idp struct {
 	UserInfo          UserInfoConfig       `yaml:"user_info"`
 	TokenExpiryBounds DurationBounds       `yaml:"token_bounds"`
 	CustomMapping     map[string]string    `yaml:"custom_mapping"`
+	IgnoreSetupError  bool                 `yaml:"ignore_setup_error"`
 }
 
 type UserInfoConfig struct {
