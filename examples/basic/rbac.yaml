@@ -2,8 +2,8 @@ rbac:
   token_max_expiration: 8h
   user_accounts:
     - name: APP1
-      public_key:   '{{ readFile "$SECRET_STORE/Accounts/APP1/acct-pubkey.pub" | trim }}'
-      signing_nkey: '{{ readFile "$SECRET_STORE/Accounts/APP1/acct-signing-key.nk" }}'
+      public_key:   '{{ readFile "$SECRET_STORE/APP1/acct-pubkey.pub" | trim }}'
+      signing_nkey: '{{ readFile "$SECRET_STORE/APP1/acct-signing-key.nk" }}'
     - name: TEST
       public_key:   '{{ readFile "$SECRET_STORE/Accounts/TEST/acct-pubkey.nk" }}'
       signing_nkey: '{{ readFile "$SECRET_STORE/Accounts/TEST/acct-signing-key.nk" }}'
@@ -71,23 +71,23 @@ rbac:
         - object-store
         - can-pubsub-foo
 
-    - user_account: TEST
+    - user_account: APP1
       match:
         - { claim: aud, value: public }
         - { claim: sub, value: "dwho" }
       token_max_expiration: 1h
       roles:
-        # - can-pubsub
+        - can-pubsub
         - streaming
         - can-pubsub-foo
 
-    - user_account: TEST
+    - user_account: APP1
       match:
         - { claim: aud, value: public }
         - { claim: sub, value: "rtyler" }
       token_max_expiration: 10s
       roles:
-        # - can-pubsub
+        - can-pubsub
         - streaming
         - can-pubsub-foo
 

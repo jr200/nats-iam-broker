@@ -12,6 +12,6 @@ idp:
         - sub
       aud:
         - '{{ env "IDP_CLIENT_ID" }}'
-      exp:
+      token_bounds:
         min: 1m0s
         max: 43800h
