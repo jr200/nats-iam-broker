@@ -201,7 +201,6 @@ func TestLookupUserAccount_Strategies(t *testing.T) {
 					}
 				}
 				assert.Equal(t, expectedPermCount, len(tt.expectedRoles), "Number of matched role permissions differs from expected")
-
 			} else {
 				assert.Nil(t, perms, "Permissions should be nil when no account is matched")
 			}

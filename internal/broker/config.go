@@ -180,7 +180,7 @@ func (cm *ConfigManager) GetConfig(mappings map[string]interface{}) (*Config, er
 	// NATS subjects cannot contain spaces, tabs, CR, LF, or the following characters: . * > /
 	// Replace any illegal characters inside the string with underscore
 	// Remove illegal characters at the start or end of the string
-	illegalChars := " _-\t\r\n.*>/"
+	illegalChars := " \t\r\n.*>/"
 	if strings.ContainsAny(cfg.Service.Name, illegalChars) {
 		// First, replace illegal chars inside the string with underscores
 		sanitizedName := cfg.Service.Name

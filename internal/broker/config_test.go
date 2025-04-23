@@ -74,7 +74,7 @@ rbac:
 		// Test with empty mappings
 		cfg1, err := cm.GetConfig(map[string]interface{}{})
 		require.NoError(t, err)
-		assert.Equal(t, "test_service", cfg1.Service.Name)
+		assert.Equal(t, "test-service", cfg1.Service.Name)
 
 		// Test with mappings
 		mappings := map[string]interface{}{
