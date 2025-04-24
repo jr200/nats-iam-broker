@@ -54,8 +54,8 @@ rbac:
             - "$JS.API.CONSUMER.CREATE.basic_test_stream.basic_test_stream"
             - "$JS.API.CONSUMER.MSG.NEXT.basic_test_stream.basic_test_stream"
         resp:
-          max: 1
-          ttl: 1h
+          max_msgs: 1
+          exp: 1h
 
       limits:
         data: 65536

@@ -1,23 +1,95 @@
 rbac:
+  token_max_expiration: 8h
   user_accounts:
     - name: APP1
-      public_key: '{{ readFile "$SECRET_STORE/APP1/acct-pubkey.pub" | trim }}'
+      public_key:   '{{ readFile "$SECRET_STORE/APP1/acct-pubkey.pub" | trim }}'
       signing_nkey: '{{ readFile "$SECRET_STORE/APP1/acct-signing-key.nk" }}'
+    - name: TEST
+      public_key:   '{{ readFile "$SECRET_STORE/Accounts/TEST/acct-pubkey.nk" }}'
+      signing_nkey: '{{ readFile "$SECRET_STORE/Accounts/TEST/acct-signing-key.nk" }}'
+    - name: TEST2
+      public_key:   '{{ readFile "$SECRET_STORE/Accounts/TEST2/acct-pubkey.nk" }}'
+      signing_nkey: '{{ readFile "$SECRET_STORE/Accounts/TEST2/acct-signing-key.nk"}}'
+    - name: FOO
+      public_key:   '{{ readFile "$SECRET_STORE/Accounts/TEST2/acct-pubkey.nk" }}'
+      signing_nkey: '{{ readFile "$SECRET_STORE/Accounts/TEST2/acct-signing-key.nk"}}'
+
+  # Matching strategy for role bindings. Valid values are:
+  # strict: Must match all values in the match list
+  # best_match: Select the most specific match
+  # default: best_match
+  #
+  # When using best_match, the role binding will be selected based on the most specific match.
+  # If there are multiple matches, the role binding with the most claims will be selected.
+  # If there are still multiple matches, the first role binding will be selected.
+  #
+  # When using strict, the role binding will only be selected if all values in the match list match.
+  # If there are multiple role bindings with the same match, the first role binding will be selected.
+  # role_binding_matching_strategy: strict
+  # role_binding_matching_strategy: best_match
 
   role_binding:
-    - match: { claim: sub, value: dwho }
-      user_account: APP1
+    - user_account: APP1
+      match:
+        - { claim: sub, value: dwho }
       roles:
         - can-pubsub
         - streaming
         - kv
         - object-store
 
-    - match: { claim: aud, value: public }
-      user_account: APP1
+    - user_account: APP1
+      match:
+        - { claim: aud, value: public }
       roles:
         - can-pubsub
         - streaming
+
+    - user_account: TEST
+      match:
+        - claim: client_id
+          value: UBE6WG2H34BOXWBNMMA3F67RBAT75AMK7U77ZSW6ILTVUCEHOB7YCDHY
+        - claim: email
+          value: a.b@example.com
+      roles:
+        - streaming
+        - kv
+        - object-store
+        - can-pubsub-foo
+      token_max_expiration: 24h
+
+    - user_account: TEST2
+      match:
+        - { claim: client_id, value: "UALSZYBUDO7VVSHLHE6CMVDJ7JCYLMD7A3BAUX5WGZU3FF755L5N47MQ" }
+        - { claim: email, value: "a.b@example.com" }
+        - { permission: "nats:account:test2" }
+      token_max_expiration: 24h
+      roles:
+        # - can-pubsub
+        - streaming
+        - kv
+        - object-store
+        - can-pubsub-foo
+
+    - user_account: APP1
+      match:
+        - { claim: aud, value: public }
+        - { claim: sub, value: "dwho" }
+      token_max_expiration: 1h
+      roles:
+        - can-pubsub
+        - streaming
+        - can-pubsub-foo
+
+    - user_account: APP1
+      match:
+        - { claim: aud, value: public }
+        - { claim: sub, value: "rtyler" }
+      token_max_expiration: 10s
+      roles:
+        - can-pubsub
+        - streaming
+        - can-pubsub-foo
 
   roles:
     - name: can-pubsub
@@ -28,6 +100,17 @@ rbac:
         sub:
           allow:
             - basic.*.{{ b64encode .sub }}
+
+    - name: can-pubsub-foo
+      permissions:
+        pub:
+          allow:
+            - foo
+            - foo.>
+        sub:
+          allow:
+            - foo
+            - foo.*
 
     - name: streaming
       permissions:
@@ -42,8 +125,8 @@ rbac:
             - "$JS.API.CONSUMER.CREATE.basic_test_stream.basic_test_stream"
             - "$JS.API.CONSUMER.MSG.NEXT.basic_test_stream.basic_test_stream"
         resp:
-          max: 1
-          ttl: 1h
+          max_msgs: 1
+          exp: 1h
 
       limits:
         data: 65536

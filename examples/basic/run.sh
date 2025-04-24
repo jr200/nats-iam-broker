@@ -18,7 +18,7 @@ nats context save \
     system_account
 
 # start the micro-service
-source ./examples/basic/basic_start_service.sh $@
+source ./examples/basic/basic_start_service.sh "${@}"
 
 # test login
 source ./examples/basic/basic_simulate_login.sh

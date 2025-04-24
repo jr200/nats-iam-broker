@@ -43,7 +43,9 @@ config:
       # URL of the NATS server
       url: nats.nats.svc:4222
       # expiration duration of granted NATS user JWTs
-      jwtExpiry: 1h15m
+      jwtExpiry:
+        min: 1m
+        max: 1h15m
 
     natsMicroService:
       # Path to the NATS user credentials file - this is the user the nats-iam-broker runs as
@@ -122,8 +124,9 @@ config:
       #         - "$JS.API.CONSUMER.CREATE.basic_test_stream.basic_test_stream"
       #         - "$JS.API.CONSUMER.MSG.NEXT.basic_test_stream.basic_test_stream"
       #     resp:
-      #       max: 1
-      #       ttl: 1h
+      #       max_msgs: 1
+      #       exp:
+      #         max: 1h
 
       #   limits:
       #     data: 65536

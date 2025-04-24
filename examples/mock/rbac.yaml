@@ -44,8 +44,9 @@ rbac:
             - "$JS.API.CONSUMER.CREATE.mock_test_stream.mock_test_stream"
             - "$JS.API.CONSUMER.MSG.NEXT.mock_test_stream.mock_test_stream"
         resp:
-          max: 1
-          ttl: 1h
+          max_msgs: 1
+          exp:
+            max: 1h
 
       limits:
         data: 65536

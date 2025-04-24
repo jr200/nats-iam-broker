@@ -8,8 +8,8 @@ jwtd() {
 function idp_mock_login() {
     IDP_URL=http://127.0.0.1:5550/oidc/
 
-    TOKENS=`curl -d scope="openid profile email" -d grant_type=client_credentials "${IDP_URL}token"`
-    ID_TOKEN=`echo $TOKENS | jq -r .id_token`
+    TOKENS=$(curl -d "scope=openid profile email" -d "grant_type=client_credentials" "${IDP_URL}token")
+    ID_TOKEN=$(echo "${TOKENS}" | jq -r .id_token)
 
-    echo $ID_TOKEN
+    echo "${ID_TOKEN}"
 }

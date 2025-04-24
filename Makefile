@@ -63,7 +63,7 @@ K8S_NAMESPACE ?= nats-iam-broker
 # Target: all                                                                  #
 ################################################################################
 .PHONY: all
-all: fmt build
+all: fmt lint build
 
 ################################################################################
 # Target: fmt                                                                  #
@@ -71,6 +71,20 @@ all: fmt build
 .PHONY: fmt
 fmt:
 	go fmt $$(go list ./...)
+
+################################################################################
+# Target: lint                                                                 #
+################################################################################
+.PHONY: lint
+lint:
+	go vet $$(go list ./...)
+	@if command -v golangci-lint > /dev/null; then \
+		echo "Running golangci-lint..."; \
+		golangci-lint run --timeout=5m; \
+	else \
+		echo "golangci-lint not found, skipping"; \
+		echo "Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
+	fi
 
 ################################################################################
 # Target: build                                                                #
@@ -162,25 +176,25 @@ chart-dry-run:
 ################################################################################
 .PHONY: example-shell
 example-shell: docker-example-build
-	docker run --rm -it --entrypoint bash nats-iam-broker:debug
+	docker run --rm -it --entrypoint bash ghcr.io/jr200/nats-iam-broker:debug
 
 ################################################################################
 # Target: example-mock                                                        #
 ################################################################################
 .PHONY: example-mock
 example-mock: docker-example-build
-	docker run --network=host --rm --entrypoint examples/mock/run.sh nats-iam-broker:debug -log-human -log=info
+	docker run --network=host --rm --entrypoint examples/mock/run.sh ghcr.io/jr200/nats-iam-broker:debug -log-human -log=info
 
 ################################################################################
 # Target: example-basic                                                        #
 ################################################################################
 .PHONY: example-basic
 example-basic: docker-example-build
-	docker run --rm --entrypoint examples/basic/run.sh nats-iam-broker:debug -log-human -log=info
+	docker run --rm --entrypoint examples/basic/run.sh ghcr.io/jr200/nats-iam-broker:debug -log-human -log=info
 
 ################################################################################
 # Target: example-rgb_org                                                      #
 ################################################################################
 .PHONY: example-rgb_org
 example-rgb_org: docker-example-build
-	docker run --rm --entrypoint examples/rgb_org/run.sh nats-iam-broker:debug -log-human -log=info
+	docker run --rm --entrypoint examples/rgb_org/run.sh ghcr.io/jr200/nats-iam-broker:debug -log-human -log=info

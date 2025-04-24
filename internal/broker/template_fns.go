@@ -122,6 +122,6 @@ func tryRenderTemplate(input string, context map[string]interface{}, params Conf
 	}
 
 	result := rendered.String()
-	log.Trace().Msgf("[render ok] %s => %s", input, result)
+	log.Trace().Msgf("[render ok] %s => %s", input, SecureLogKey(result))
 	return result
 }
