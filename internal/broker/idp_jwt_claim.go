@@ -217,8 +217,12 @@ func (j *IdpJwtClaims) fromMap(m map[string]interface{}, customMapping map[strin
 			switch structField {
 			case "EmailVerified":
 				j.EmailVerified = toBool(value)
-			case "Expiry", "IssuedAt", "NotBeforeTime":
+			case "Expiry":
 				j.Expiry = toInt64(value)
+			case "IssuedAt":
+				j.IssuedAt = toInt64(value)
+			case "NotBeforeTime":
+				j.NotBeforeTime = toInt64(value)
 			default:
 				// Use reflection to set the field value
 				field := reflect.ValueOf(j).Elem().FieldByName(structField)
