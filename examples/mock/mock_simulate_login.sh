@@ -12,5 +12,5 @@ test-client \
     -url=${NATS_URL} \
     -creds=${SECRET_STORE}/MINT/user-nobody.creds \
     -jwt $JWT_MOCK \
-    -run-test "pubsub mock.mockclientid.Ym9iQGFjbWUuY29t hello-from-bob"
+    -run-test pubsub mock.mockclientid.Ym9iQGFjbWUuY29t hello-from-bob
 

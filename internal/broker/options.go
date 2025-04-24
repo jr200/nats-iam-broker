@@ -1,29 +1,29 @@
 package server
 
-// ServerOptions holds all configuration options for the server
-type ServerOptions struct {
+// Options holds all configuration options for the server
+type Options struct {
 	// LogSensitive enables logging of sensitive information (for debugging)
 	LogSensitive bool
 }
 
-// ServerContext holds both server options and other server state
-type ServerContext struct {
-	Options *ServerOptions
+// Context holds both server options and other server state
+type Context struct {
+	Options *Options
 }
 
-// NewServerContext creates a new ServerContext with the given options
-func NewServerContext(opts *ServerOptions) *ServerContext {
+// NewServerContext creates a new server.Context with the given options
+func NewServerContext(opts *Options) *Context {
 	if opts == nil {
 		opts = DefaultServerOptions()
 	}
-	return &ServerContext{
+	return &Context{
 		Options: opts,
 	}
 }
 
-// DefaultServerOptions returns a ServerOptions instance with default values
-func DefaultServerOptions() *ServerOptions {
-	return &ServerOptions{
+// DefaultServerOptions returns a server.Options instance with default values
+func DefaultServerOptions() *Options {
+	return &Options{
 		LogSensitive: false,
 	}
 }

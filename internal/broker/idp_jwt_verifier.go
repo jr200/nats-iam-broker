@@ -20,7 +20,7 @@ type IdpAndJwtVerifier struct {
 	config   *Idp
 }
 
-func NewIdpVerifiers(ctx *ServerContext, config *Config) ([]IdpAndJwtVerifier, error) {
+func NewIdpVerifiers(ctx *Context, config *Config) ([]IdpAndJwtVerifier, error) {
 	idpVerifiers := make([]IdpAndJwtVerifier, 0, len(config.Idp))
 	for i := range config.Idp {
 		idp := &config.Idp[i] // Use a pointer to the IDP config
@@ -29,10 +29,10 @@ func NewIdpVerifiers(ctx *ServerContext, config *Config) ([]IdpAndJwtVerifier, e
 			if idp.IgnoreSetupError {
 				log.Warn().Err(err).Str("issuer_url", idp.IssuerURL).Str("client_id", idp.ClientID).Msg("Failed to setup IDP verifier, ignoring due to config")
 				continue // Skip this IDP and continue with the next one
-			} else {
-				log.Error().Err(err).Str("issuer_url", idp.IssuerURL).Str("client_id", idp.ClientID).Msg("Failed to setup IDP verifier, halting startup")
-				return nil, fmt.Errorf("failed to setup verifier for IDP %s (%s): %w", idp.Description, idp.IssuerURL, err)
 			}
+
+			log.Error().Err(err).Str("issuer_url", idp.IssuerURL).Str("client_id", idp.ClientID).Msg("Failed to setup IDP verifier, halting startup")
+			return nil, fmt.Errorf("failed to setup verifier for IDP %s (%s): %w", idp.Description, idp.IssuerURL, err)
 		}
 		idpVerifiers = append(idpVerifiers, IdpAndJwtVerifier{idpVerifier, idp}) // Pass the pointer to the config
 	}
@@ -73,7 +73,7 @@ func runVerification(jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims,
 }
 
 type IdpJwtVerifier struct {
-	ctx *ServerContext
+	ctx *Context
 	*oidc.IDTokenVerifier
 	provider         *oidc.Provider
 	issuerURL        string
@@ -82,7 +82,7 @@ type IdpJwtVerifier struct {
 	IDToken          *oidc.IDToken
 }
 
-func NewJwtVerifier(ctx *ServerContext, clientID string, issuerURL string) (*IdpJwtVerifier, error) {
+func NewJwtVerifier(ctx *Context, clientID string, issuerURL string) (*IdpJwtVerifier, error) {
 	const maxTokenLifetime = time.Hour * 24
 	const clockSkew = time.Minute * 5
 
@@ -181,6 +181,7 @@ func (v *IdpJwtVerifier) validateAgainstSpec(claims *IdpJwtClaims, spec IdpJwtVa
 
 	if spec.SkipAudienceValidation || spec.Audience == nil || len(spec.Audience) == 0 {
 		// Skip audience validation if explicitly disabled or no audience configured
+		_ = 1
 	} else {
 		err := claims.validateAudience(spec.Audience)
 		if err != nil {

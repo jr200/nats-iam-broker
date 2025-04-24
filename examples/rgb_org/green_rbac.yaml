@@ -5,7 +5,8 @@ rbac:
       signing_nkey: '{{ readFile "$SECRET_STORE/APP7/acct-signing-key.nk" }}'
 
   role_binding:
-    - match: { claim: sub, value: rtyler }
+    - match: 
+      - { claim: sub, value: rtyler }
       user_account: APP7
       roles:
         - can-pubsub

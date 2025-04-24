@@ -127,10 +127,10 @@ func evaluateMatchCriterion(match Match, context map[string]interface{}, binding
 		if isPermissionMatched {
 			log.Debug().Msgf("match-pass[permission]: %s (Binding Index: %d)", match.Permission, bindingIndex)
 			return true, fmt.Sprintf("permission=%s", match.Permission)
-		} else {
-			log.Debug().Msgf("match-fail[permission]: %s (Binding Index: %d)", match.Permission, bindingIndex)
-			return false, ""
 		}
+
+		log.Debug().Msgf("match-fail[permission]: %s (Binding Index: %d)", match.Permission, bindingIndex)
+		return false, ""
 	}
 
 	// Handle regular claim-based matching
@@ -162,10 +162,10 @@ func evaluateMatchCriterion(match Match, context map[string]interface{}, binding
 
 	if isClaimMatched {
 		return true, fmt.Sprintf("%s=%s", match.Claim, match.Value)
-	} else {
-		log.Debug().Msgf("match-fail[%s]: value '%s' not found in context value '%v' (Binding Index: %d)", match.Claim, match.Value, contextValue, bindingIndex)
-		return false, ""
 	}
+
+	log.Debug().Msgf("match-fail[%s]: value '%s' not found in context value '%v' (Binding Index: %d)", match.Claim, match.Value, contextValue, bindingIndex)
+	return false, ""
 }
 
 func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt.Permissions, *jwt.Limits, Duration) {

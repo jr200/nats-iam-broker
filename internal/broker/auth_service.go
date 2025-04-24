@@ -17,7 +17,7 @@ type SigningKeyInfo struct {
 }
 
 type AuthService struct {
-	ctx               *ServerContext
+	ctx               *Context
 	serviceAccountKey nkeys.KeyPair
 	encryptionKey     nkeys.KeyPair
 	createNewClaimsFn AuthHandler
@@ -25,7 +25,7 @@ type AuthService struct {
 
 type AuthHandler func(req *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error)
 
-func NewAuthService(ctx *ServerContext, issuer nkeys.KeyPair, xkey nkeys.KeyPair, handler AuthHandler) *AuthService {
+func NewAuthService(ctx *Context, issuer nkeys.KeyPair, xkey nkeys.KeyPair, handler AuthHandler) *AuthService {
 	return &AuthService{
 		ctx:               ctx,
 		serviceAccountKey: issuer,
@@ -43,34 +43,31 @@ func determineSigningKeyType(claims *jwt.UserClaims, kp nkeys.KeyPair, accountIn
 	}
 
 	// Check if the signing key matches the issuer account directly
-	if claims.IssuerAccount == signingPubKey {
+	switch {
+	case claims.IssuerAccount == signingPubKey:
 		log.Trace().Msg("signing key matches account public key directly")
 		return &SigningKeyInfo{
 			Type:      "pub_key",
 			PublicKey: signingPubKey,
 		}, nil
-	} else if accountInfo != nil {
-		// Check if the signing key matches the account's authorized signing key
-		if accountInfo.SigningNKey.KeyPair != nil {
-			signingNKeyPub, err := accountInfo.SigningNKey.KeyPair.PublicKey()
-			if err != nil {
-				return nil, fmt.Errorf("failed to get account signing key's public key: %v", err)
-			}
-
-			if signingPubKey == signingNKeyPub {
-				// The signing key matches the account's authorized signing key
-				log.Trace().Msg("signing key matches account signing key")
-				return &SigningKeyInfo{
-					Type:      "signing_key",
-					PublicKey: signingNKeyPub,
-				}, nil
-			} else {
-				return nil, fmt.Errorf("signing key does not match account public key or signing key")
-			}
-		} else {
-			return nil, fmt.Errorf("account signing key not available and key does not match account public key")
+	case accountInfo != nil && accountInfo.SigningNKey.KeyPair != nil:
+		signingNKeyPub, err := accountInfo.SigningNKey.KeyPair.PublicKey()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get account signing key's public key: %v", err)
 		}
-	} else {
+
+		if signingPubKey == signingNKeyPub {
+			// The signing key matches the account's authorized signing key
+			log.Trace().Msg("signing key matches account signing key")
+			return &SigningKeyInfo{
+				Type:      "signing_key",
+				PublicKey: signingNKeyPub,
+			}, nil
+		}
+		return nil, fmt.Errorf("signing key does not match account public key or signing key")
+	case accountInfo != nil:
+		return nil, fmt.Errorf("account signing key not available and key does not match account public key")
+	default:
 		return nil, fmt.Errorf("issuer account does not match signing key")
 	}
 }

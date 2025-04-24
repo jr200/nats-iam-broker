@@ -10,7 +10,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-var serverOpts *server.ServerOptions
+var serverOpts *server.Options
 
 func main() {
 	configFiles := parseFlags()

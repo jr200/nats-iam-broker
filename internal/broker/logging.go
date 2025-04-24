@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+const (
+	// KeyPrefixLength is the number of characters to show from the start of a key
+	KeyPrefixLength = 2
+)
+
 // SecureLogKey returns a redacted version of a key for secure logging.
 // Based on NATS key prefixes from github.com/nats-io/nkeys:
 // - S: Seeds (sensitive, show first 2 chars as second char indicates key type)
@@ -39,10 +44,10 @@ func SecureLogKey(key interface{}) string {
 
 		// Seed keys (S) need to show first two chars as the second char indicates type
 		if prefix == "S" {
-			if len(keyStr) <= 2 {
+			if len(keyStr) <= KeyPrefixLength {
 				return keyStr
 			}
-			return fmt.Sprintf("%s%s", keyStr[:2], strings.Repeat("*", len(keyStr)-2))
+			return fmt.Sprintf("%s%s", keyStr[:KeyPrefixLength], strings.Repeat("*", len(keyStr)-KeyPrefixLength))
 		}
 
 		// Public keys (N, C, O, A, U, X) are not sensitive - show in full
@@ -52,7 +57,7 @@ func SecureLogKey(key interface{}) string {
 	}
 
 	// Default case: show first 2 chars only
-	if len(keyStr) <= 2 {
+	if len(keyStr) <= KeyPrefixLength {
 		return keyStr
 	}
 	// Check if string matches key format (base32 encoded)
@@ -66,5 +71,5 @@ func SecureLogKey(key interface{}) string {
 	if !isBase32 {
 		return keyStr
 	}
-	return fmt.Sprintf("%s%s", keyStr[:2], strings.Repeat("*", len(keyStr)-2))
+	return fmt.Sprintf("%s%s", keyStr[:KeyPrefixLength], strings.Repeat("*", len(keyStr)-KeyPrefixLength))
 }
