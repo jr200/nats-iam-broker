@@ -1,18 +1,20 @@
 rbac:
   user_accounts:
-    - name: '{{ env "$APP_ACCT_1" }}'
+    - name: '{{ env "APP_ACCT_1" }}'
       public_key: '{{ readFile "$IAM_ACCT_ID_1" | trim }}'
       signing_nkey: '{{ readFile "$IAM_ACCT_SK_1" }}'
 
   role_binding:
-    - match: { claim: preferred_username, value: 'cryptoadmin' }
-      user_account: '{{ env "$APP_ACCT_1" }}'
+    - match:
+      - { claim: preferred_username, value: 'cryptoadmin' }
+      user_account: '{{ env "APP_ACCT_1" }}'
       roles:
         - can-pubsub
         - streaming
 
-    # - match: { claim: aud, value: public }
-    #   user_account: '{{ env "$APP_ACCT_1" }}'
+    # - match:
+    #   - { claim: aud, value: public }
+    #   user_account: '{{ env "APP_ACCT_1" }}'
     #   roles:
     #     - can-pubsub
     #     - streaming

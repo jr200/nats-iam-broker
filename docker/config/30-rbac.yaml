@@ -1,12 +1,12 @@
 rbac:
   user_accounts:
-    - name: '{{ env "$APP_ACCT_1" }}'
+    - name: '{{ env "APP_ACCT_1" }}'
       public_key: '{{ readFile "$APP_ID_1" | trim }}'
       signing_nkey: '{{ readFile "$APP_SK_1" }}'
 
   role_binding:
     - match: { claim: preferred_username, value: 'admin' }
-      user_account: '{{ env "$APP_ACCT_1" }}'
+      user_account: '{{ env "APP_ACCT_1" }}'
       roles:
         - can-pubsub
         - can-api
@@ -15,7 +15,7 @@ rbac:
         # - object-store
 
     # - match: { claim: aud, value: public }
-    #   user_account: '{{ env "$APP_ACCT_1" }}'
+    #   user_account: '{{ env "APP_ACCT_1" }}'
     #   roles:
     #     - can-pubsub
     #     - streaming
