@@ -13,7 +13,7 @@ test-client \
     -url=${NATS_URL} \
     -creds=${SECRET_STORE}/MINT_01/user-nobody.creds \
     -jwt $JWT_RTYLER \
-    -run-test "pubsub green.public.rtyler hello-from-rtyler"
+    -run-test pubsub green.public.rtyler hello-from-rtyler
 
 # using green-minter-02
 
@@ -22,4 +22,4 @@ test-client \
     -url=${NATS_URL} \
     -creds=${SECRET_STORE}/MINT_02/user-nobody.creds \
     -jwt $JWT_RTYLER \
-    -run-test "pubsub green.private.rtyler hello-from-rtyler"
+    -run-test pubsub green.private.rtyler hello-from-rtyler

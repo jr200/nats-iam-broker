@@ -13,12 +13,14 @@ rbac:
       signing_nkey: '{{ readFile "$SECRET_STORE/APP3/acct-signing-key.nk" }}'
 
   role_binding:
-    - match: { claim: sub, value: msmith }
+    - match: 
+      - { claim: sub, value: msmith }
       user_account: APP3
       roles:
         - can-pubsub-other
 
-    - match: { claim: aud, value: public }
+    - match: 
+      - { claim: aud, value: public }
       user_account: APP3
       roles:
         - can-pubsub

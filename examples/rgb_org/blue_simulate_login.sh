@@ -11,4 +11,4 @@ test-client \
     -url=${NATS_URL} \
     -creds=${SECRET_STORE}/MINT_11/user-nobody.creds \
     -jwt $JWT_MSMITH \
-    -run-test "pubsub blue.public.other hello-from-other"
+    -run-test pubsub blue.public.other hello-from-other
