@@ -137,10 +137,10 @@ func TestNewIdpVerifiers(t *testing.T) {
 	logOutput := &bytes.Buffer{}
 	_ = zerolog.New(logOutput).Level(zerolog.ErrorLevel).With().Timestamp().Logger() // Assign to blank identifier
 
-	// Passing nil for ServerContext as its structure is unclear and causing issues.
+	// Passing nil for server.Context as its structure is unclear and causing issues.
 	// If NewIdpVerifiers requires a non-nil context with specific fields,
 	// this test will need adjustment based on the actual implementation.
-	var ctx *ServerContext
+	var ctx *Context
 
 	validIssuer := "http://localhost:9999/valid" // Assume this could be mocked if needed
 	invalidIssuer := "invalid-url-:::"

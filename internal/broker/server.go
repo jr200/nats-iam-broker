@@ -16,7 +16,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func Start(configFiles []string, serverOpts *ServerOptions) error {
+func Start(configFiles []string, serverOpts *Options) error {
 	ctx := NewServerContext(serverOpts)
 	// This is reads the config from disk on server start. Downside with caching is that if the config
 	// is updated, the service will not pick it up until the service is restarted.
@@ -62,6 +62,7 @@ func Start(configFiles []string, serverOpts *ServerOptions) error {
 	}
 
 	auditEventSubject := config.Service.Name + ".evt.audit.account.%s.user.%s.created"
+	//nolint:mnd // 2 is the number of %s placeholders in auditEventSubject
 	log.Info().Msgf("Audit events will be published to: %s", strings.Replace(auditEventSubject, "%s", "*", 2))
 
 	auth := NewAuthService(ctx, config.Service.Account.SigningNKey.KeyPair, config.serviceEncryptionXkey(), func(request *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error) {
