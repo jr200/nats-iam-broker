@@ -17,5 +17,4 @@ export SERVICE_ACCT_SIGNK="${SECRET_STORE}/${SERVICE_ACCT}/acct-signing-key.nk"
 export SERVICE_ACCT_XK="${SECRET_STORE}/${SERVICE_ACCT}/acct-encryption-key.xk"
 
 
-nats-iam-broker $@ ${CONFIG_DIR}/env_minter.yaml ${CONFIG_DIR}/idp_mock.yaml ${SCRIPT_DIR}/rbac.yaml &
-
+nats-iam-broker "${@}" ${CONFIG_DIR}/env_minter.yaml ${CONFIG_DIR}/idp_mock.yaml "${SCRIPT_DIR}"/rbac.yaml &

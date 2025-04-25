@@ -2,7 +2,7 @@
 
 jwtd() {
     read foo;
-    jq -R 'split(".") |.[0:2] | map(gsub("-"; "+") | gsub("_"; "/") | gsub("%3D"; "=") | @base64d) | map(fromjson)' <<< $foo; 
+    jq -R 'split(".") |.[0:2] | map(gsub("-"; "+") | gsub("_"; "/") | gsub("%3D"; "=") | @base64d) | map(fromjson)' <<< "${foo}"; 
 }
 
 function idp_mock_login() {

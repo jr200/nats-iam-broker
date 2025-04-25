@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
+SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)"
 
 VAULT_CMD=bao
 VAULT_CMD=vault
@@ -136,7 +136,6 @@ function save_nats_context() {
       --description "vault-nats: ${operator}/${account}/${user}" \
       "${@}"
 }
-
 
 function create_plain_account() {
   local operator=$1
