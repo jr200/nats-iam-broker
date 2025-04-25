@@ -5,18 +5,18 @@ rbac:
       signing_nkey: '{{ readFile "$SECRET_STORE/APP1/acct-signing-key.nk" }}'
 
   role_binding:
-    - match: 
-      - { claim: sub, value: bob@acme.com }
-      user_account: APP1
+    - user_account: APP1
+      match:
+        - { claim: sub, value: bob@acme.com }
       roles:
         - can-pubsub
         - streaming
         - kv
         - object-store
 
-    - match: 
-      - { claim: aud, value: mockclientid }
-      user_account: APP1
+    - user_account: APP1
+      match:
+        - { claim: aud, value: mockclientid }
       roles:
         - can-pubsub
         - streaming
