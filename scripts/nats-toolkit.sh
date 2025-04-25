@@ -26,7 +26,7 @@ function create_new_nats_config() {
   cat <<- EOF > server.conf
   server_name: "test_server"
   logtime: true
-  debug: true
+  debug: false
   trace: false
   http_port: 8222
   jetstream {
