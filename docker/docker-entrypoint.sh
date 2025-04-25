@@ -65,7 +65,7 @@ set_env_or_default IAM_ACCOUNT_SIGNK "/secrets/${IAM_ACCOUNT_NAME}-sk-1.nk"
 set_env_or_default IAM_USER_CREDS "/secrets/${IAM_ACCOUNT_NAME}-ac-user.creds"
 
 # Auto-generate accounts if APP_AUTO_ACCOUNTS is set
-if [ ! -z "${APP_AUTO_ACCOUNTS}" ]; then
+if [ -n "${APP_AUTO_ACCOUNTS}" ]; then
     IFS=',' read -ra ACCOUNTS <<< "${APP_AUTO_ACCOUNTS}"
     idx=1
     for account in "${ACCOUNTS[@]}"; do
@@ -81,7 +81,7 @@ if [ ! -z "${APP_AUTO_ACCOUNTS}" ]; then
 fi
 
 echo "Waiting ${IAM_STARTUP_DELAY} before startup..."
-sleep ${IAM_STARTUP_DELAY}
+sleep "${IAM_STARTUP_DELAY}"
 
 # port-forward endpoints defined in IAM_PORT_FORWARDS
 # csvs of: external_hostname:external_port:container_port)
@@ -90,7 +90,7 @@ IFS=',' read -ra ENDPOINTS <<< "${IAM_PORT_FORWARDS}"
 for endpoint in "${ENDPOINTS[@]}"; do
     IFS=':' read -r external_host external_port container_port <<< "${endpoint}"
     echo "Port-forwarding ${external_host}:${external_port} to localhost:${container_port}"
-    nc -lk -p ${container_port} -e nc ${external_host} ${external_port} &
+    nc -lk -p "${container_port}" -e nc "${external_host}" "${external_port}" &
 done
 
 if [ "${DEBUG}" = "1" ]; then
@@ -98,6 +98,7 @@ if [ "${DEBUG}" = "1" ]; then
 fi
 
 # start the nats-iam-broker
-echo [CMD] nats-iam-broker $@ ${IAM_CONFIGS}
+# shellcheck disable=SC2145
+echo "[CMD] nats-iam-broker ${@} ${IAM_CONFIGS}"
 
-nats-iam-broker $@ ${IAM_CONFIGS}
+nats-iam-broker "$@" "${IAM_CONFIGS}"
