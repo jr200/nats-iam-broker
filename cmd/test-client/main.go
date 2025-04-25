@@ -72,7 +72,7 @@ func ListTestCases() string {
 func main() {
 	err := run()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[client stderr] %v", err)
+		fmt.Fprintf(os.Stderr, "[client stderr] %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -112,13 +112,17 @@ func run() error {
 	flag.Parse()
 	configureLogging(logLevel, true)
 
-	log.Info().Msgf("connecting to %s", natsURL)
+	if testCaseStr != "" {
+		log.Info().Msgf("running test, type: %s, args: %v", testCaseStr, flag.Args())
+	}
+
 	log.Trace().Msgf("sending jwt %s", idpJwt)
 	if token != "" {
 		log.Trace().Msg("using authentication token")
 	}
 
 	var natsErr = false
+	var nc *nats.Conn
 
 	options := []nats.Option{
 		nats.LameDuckModeHandler(func(_ *nats.Conn) {
@@ -128,7 +132,7 @@ func run() error {
 			log.Info().Msg("nats client reconnected")
 		}),
 		nats.ConnectHandler(func(_ *nats.Conn) {
-			log.Info().Msg("nats client connected")
+			log.Info().Msgf("connected to nats on %s", nc.ConnectedUrl())
 		}),
 		nats.Name("test-client"),
 		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
@@ -147,43 +151,58 @@ func run() error {
 		options = append(options, nats.Token(idpJwt))
 	}
 
-	nc, err := nats.Connect(
-		natsURL,
-		options...,
-	)
-
-	if err != nil {
-		log.Err(err).Msg("failed to connect")
-		return err
+	var connectionErr error
+	nc, connectionErr = nats.Connect(natsURL, options...)
+	if connectionErr != nil {
+		log.Error().Err(connectionErr).Msg("failed to connect")
+		// If not running a specific test, return the error immediately
+		if testCaseStr == "" {
+			return fmt.Errorf("failed to connect: %w", connectionErr)
+		}
+		// Otherwise, nc will be nil, and the test failure will be handled below
 	}
 
-	log.Info().Msgf("successful connection to %s", nc.ConnectedUrl())
-
 	if testCaseStr != "" {
-		// Get remaining positional arguments
+		testFailed := false
 		testArgs := flag.Args()
-		testErr := runTestCase(nc, testCaseStr, testArgs)
-		time.Sleep(time.Duration(clientSleep) * time.Second)
+		var testErr error
 
-		switch {
-		case testErr != nil:
-			log.Err(testErr).Msg("test failed. err from test-client.")
-		case natsErr:
-			log.Error().Msg("test failed. err from nats-server")
-		default:
-			log.Info().Msg("test successful")
+		if nc == nil { // Check if connection failed earlier
+			log.Error().Msgf("test [%s] failed due to connection error", testCaseStr)
+			testFailed = true
+		} else {
+			// Connection succeeded, proceed with test case
+			testErr = runTestCase(nc, testCaseStr, testArgs)
+			time.Sleep(time.Duration(clientSleep) * time.Second)
+
+			if testErr != nil {
+				log.Err(testErr).Msgf("test [%s] failed. err from test-client.", testCaseStr)
+				testFailed = true
+			}
+			if natsErr { // natsErr is set by the async error handler
+				log.Error().Msgf("test [%s] failed due to nats error.", testCaseStr)
+				testFailed = true
+			}
+		}
+
+		if !testFailed {
+			log.Info().Msgf("test successful, type: %s, args: %v", testCaseStr, flag.Args())
 		}
 	}
 
-	if err := nc.Drain(); err != nil {
-		log.Err(err).Msg("error draining NATS connection")
+	// Only drain if the connection was successful
+	if nc != nil {
+		if err := nc.Drain(); err != nil {
+			log.Err(err).Msg("error draining NATS connection")
+			// Potentially return this error if draining failure is critical
+		}
 	}
 
 	return nil
 }
 
 func runTestCase(nc *nats.Conn, testCaseStr string, args []string) error {
-	log.Info().Msgf("test-case type: %s, args: %v", testCaseStr, args)
+	log.Trace().Msgf("in runTestCase: test-case type: %s, args: %v", testCaseStr, args)
 
 	if testCaseStr == "" {
 		log.Trace().Msg("no test to run")
@@ -194,8 +213,6 @@ func runTestCase(nc *nats.Conn, testCaseStr string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("%v. Valid cases are: %s", err, ListTestCases())
 	}
-
-	log.Info().Msgf("running test-case: %s", testCase)
 
 	switch testCase {
 	case Sub:

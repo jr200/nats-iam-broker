@@ -9,6 +9,10 @@ SECRET_STORE="/usr/src/app/secrets/mock"
 
 JWT_MOCK=$(idp_mock_login)
 
+sleep 1
+printf "\nRunning test cases...\n"
+
+printf "Running test 1: mocked bob\n"
 test-client \
     -url ${NATS_URL} \
     -creds ${SECRET_STORE}/MINT/user-nobody.creds \

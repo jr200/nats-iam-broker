@@ -16,6 +16,10 @@ source ./examples/rgb_org/green_initial_setup.sh
 # shellcheck source=/dev/null
 source ./examples/rgb_org/blue_initial_setup.sh
 
+# Push all accounts once after creation
+printf "\nPushing all accounts to the server, this may take a while...\n"
+nsc push -A
+
 # debug: save system_account creds for inspection
 nats context save \
     --nsc=nsc://rgb_org/SYS/sys \
@@ -34,6 +38,7 @@ source ./examples/rgb_org/blue_start_service.sh "${@}"
 sleep 2
 
 # test login
+printf "\nRunning test cases...\n"
 # shellcheck source=/dev/null
 source ./examples/rgb_org/red_simulate_login.sh
 

@@ -15,4 +15,8 @@ create_minting_account green MINT_02
 create_plain_account green APP7
 
 # Push the app accounts up to the server.
-nsc push -A
+# Only push if the script is run directly, not when sourced
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  # nsc push -A
+  nsc push -A
+fi

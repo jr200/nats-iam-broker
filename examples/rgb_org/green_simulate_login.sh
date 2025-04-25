@@ -9,7 +9,10 @@ SECRET_STORE="/usr/src/app/secrets/green"
 
 # using green-minter-01
 
+printf "\nGreen department:\n"
+
 JWT_RTYLER=$(idp_oidctest_login_public rtyler rtyler)
+printf "Running test 1: oidc public rtyler\n"
 test-client \
     -url ${NATS_URL} \
     -creds ${SECRET_STORE}/MINT_01/user-nobody.creds \
@@ -19,6 +22,7 @@ test-client \
 # using green-minter-02
 
 JWT_RTYLER=$(idp_oidctest_login_private rtyler rtyler)
+printf "\nRunning test 2: oidc private rtyler\n"
 test-client \
     -url ${NATS_URL} \
     -creds ${SECRET_STORE}/MINT_02/user-nobody.creds \
