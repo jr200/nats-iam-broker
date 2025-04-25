@@ -79,11 +79,40 @@ function create_user() {
 
 function show_context_creds() {
   local creds_name=$1
-  local creds_file=`nats context info "${creds_name}" -j | jq -r .creds`
+  local context_info
+  local creds_file
+  local exit_code
 
-  if [[ -z "$creds_file" ]]; then
-    echo "BAD_CREDS"
-  else
-    cat ${creds_file}
+  # Attempt to get context info and capture exit code
+  context_info=$(nats context info "${creds_name}" -j 2>/dev/null)
+  exit_code=$?
+
+  if [[ ${exit_code} -ne 0 ]]; then
+    echo "Error: Failed to get info for context '${creds_name}'. Does it exist?" >&2
+    return 1
   fi
+
+  # Extract creds file path
+  creds_file=$(echo "${context_info}" | jq -r .creds 2>/dev/null)
+  exit_code=$?
+
+   if [[ ${exit_code} -ne 0 ]]; then
+    echo "Error: Failed to parse context info with jq for '${creds_name}'." >&2
+    return 1
+  fi
+
+  # Check if creds file path is empty or null
+  if [[ -z "$creds_file" || "$creds_file" == "null" ]]; then
+    echo "Error: No credentials file found for context '${creds_name}'." >&2
+    return 1
+  fi
+
+  # Check if the creds file actually exists
+  if [[ ! -f "$creds_file" ]]; then
+      echo "Error: Credentials file '${creds_file}' for context '${creds_name}' not found." >&2
+      return 1
+  fi
+
+  # If all checks pass, output the credentials
+  cat "${creds_file}"
 }
