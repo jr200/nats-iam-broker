@@ -42,6 +42,7 @@ function idp_oidctest_login_private() {
     # echo $CODE
 
     TOKENS=$(curl -s -X POST -d "grant_type=authorization_code" -d 'redirect_uri=http://localhost' -d "code=${CODE}" -u private:tardis "${IDP_URL}token")
+    ID_TOKEN=$(echo "$TOKENS" | jq -r .id_token)
 
     echo "$ID_TOKEN"
 }
