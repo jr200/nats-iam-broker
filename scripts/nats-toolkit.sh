@@ -6,7 +6,7 @@ function create_new_nats_config() {
   local operator=$2
   mkdir -p /usr/src/app/jsdata
 
-  nsc add operator --generate-signing-key --sys --name ${operator}
+  nsc add operator --generate-signing-key --sys --name "${operator}"
 
   # A follow-up edit of the operator enforces signing keys are used for
   # accounts as well. Setting the server URL is a convenience so that
@@ -26,7 +26,7 @@ function create_new_nats_config() {
   cat <<- EOF > server.conf
   server_name: "test_server"
   logtime: true
-  debug: true
+  debug: false
   trace: false
   http_port: 8222
   jetstream {

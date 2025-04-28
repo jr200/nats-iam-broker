@@ -2,7 +2,7 @@
 
 jwtd() {
     read foo;
-    jq -R 'split(".") |.[0:2] | map(gsub("-"; "+") | gsub("_"; "/") | gsub("%3D"; "=") | @base64d) | map(fromjson)' <<< $foo; 
+    jq -R 'split(".") |.[0:2] | map(gsub("-"; "+") | gsub("_"; "/") | gsub("%3D"; "=") | @base64d) | map(fromjson)' <<< "$foo"; 
 }
 
 function idp_oidctest_login_public() {
@@ -42,9 +42,9 @@ function idp_oidctest_login_private() {
     # echo $CODE
 
     TOKENS=$(curl -s -X POST -d "grant_type=authorization_code" -d 'redirect_uri=http://localhost' -d "code=${CODE}" -u private:tardis "${IDP_URL}token")
+    ID_TOKEN=$(echo "$TOKENS" | jq -r .id_token)
 
     echo "$ID_TOKEN"
 }
 
 # curl -s -D - -o /dev/null -b lemonldap=${SESSION_ID} 'https://oidctest.wsweet.org/oauth2/logout?confirm=1'
-

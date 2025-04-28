@@ -70,14 +70,28 @@ all: fmt lint build
 ################################################################################
 .PHONY: fmt
 fmt:
-	go fmt $$(go list ./...)
+	go fmt ./...
 
 ################################################################################
 # Target: test                                                                  #
 ################################################################################
 .PHONY: test
 test:
-	go test $$(go list ./...)
+	go test -timeout=10m ./...
+
+################################################################################
+# Target: test-race                                                            #
+################################################################################
+.PHONY: test-race
+test-race:
+	go test -race -cover -coverprofile=coverage.out -timeout=10m ./...
+
+################################################################################
+# Target: view-coverage                                                        #
+################################################################################
+.PHONY: view-coverage
+view-coverage: test-race
+	go tool cover -html=coverage.out
 
 ################################################################################
 # Target: lint                                                                 #
@@ -98,6 +112,10 @@ lint:
 ################################################################################
 .PHONY: build
 build:
+	# tidy up go.mod before building
+	go mod tidy
+	go mod download
+
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) \
 	go build -o build/nats-iam-broker-$(GOOS)-$(GOARCH) -gcflags "all=-N -l" -ldflags '-extldflags "-static"' \
 	cmd/nats-iam-broker/main.go
@@ -106,6 +124,15 @@ build:
 	go build -o build/test-client-$(GOOS)-$(GOARCH) -gcflags "all=-N -l" -ldflags '-extldflags "-static"' \
 	cmd/test-client/main.go
 
+################################################################################
+# Target: clean                                                                #
+################################################################################
+.PHONY: clean
+clean:
+	@echo "Cleaning build artifacts and test cache..."
+	rm -rf ./build
+	rm -f coverage.out
+	go clean -testcache
 
 ################################################################################
 # Target: docker-offical-build                                                 #

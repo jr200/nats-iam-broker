@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
+SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)"
 
 export NATS_URL="nats://localhost:4222"
 export SECRET_STORE="/usr/src/app/secrets/basic"
@@ -15,6 +15,5 @@ export SERVICE_USER_CREDS="${SECRET_STORE}/${SERVICE_ACCT}/user-minter.creds"
 
 export SERVICE_ACCT_SIGNK="${SECRET_STORE}/${SERVICE_ACCT}/acct-signing-key.nk"
 export SERVICE_ACCT_XK="${SECRET_STORE}/${SERVICE_ACCT}/acct-encryption-key.xk"
-
 
 nats-iam-broker "${@}" ${CONFIG_DIR}/*.yaml "${SCRIPT_DIR}"/rbac.yaml &

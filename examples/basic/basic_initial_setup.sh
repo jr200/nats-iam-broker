@@ -1,8 +1,10 @@
 #!/bin/bash
 
-SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
-source ${SCRIPT_DIR}/../../scripts/nsc-toolkit.sh
+SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}"/../../scripts/nsc-toolkit.sh
 
+# shellcheck disable=SC2034
 SECRET_STORE="/usr/src/app/secrets"
 
 # setup basic accounts
