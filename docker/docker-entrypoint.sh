@@ -98,7 +98,7 @@ if [ "${DEBUG}" = "1" ]; then
 fi
 
 # start the nats-iam-broker
-# shellcheck disable=SC2145
-echo "[CMD] nats-iam-broker ${@} ${IAM_CONFIGS}"
+echo "[CMD]" "nats-iam-broker" "$@" "${IAM_CONFIGS}"
 
-nats-iam-broker "$@" "${IAM_CONFIGS}"
+# shellcheck disable=SC2086 # Allow word splitting and glob expansion for user args ($@) and config path (${IAM_CONFIGS})
+nats-iam-broker $@ ${IAM_CONFIGS}
