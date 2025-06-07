@@ -162,7 +162,7 @@ function create_minting_account() {
   minter_pubkey=$(read_user_pubkey "${operator}" "${account}" minter)
   create_user_nobody "${operator}" "${account}"
 
-	nsc generate nkey --curve 2> ./tmp/acct-encryption-key.xk
+	nsc generate nkey --curve > ./tmp/acct-encryption-key.xk
   encryption_pubkey=$(sed -n 2,1p ./tmp/acct-encryption-key.xk)
 
   account_json=$(render_jq_template "${template_file}" \
