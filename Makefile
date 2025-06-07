@@ -1,5 +1,3 @@
-OIDC_SERVER_VERSION?=v0.8.4
-
 # get target architecture
 LOCAL_ARCH := $(shell uname -m)
 ifeq ($(LOCAL_ARCH),x86_64)
@@ -159,7 +157,6 @@ docker-example-build:
 		-f docker/Dockerfile.example \
 		--build-arg BUILD_OS=linux \
 		--build-arg BUILD_ARCH=$(GOARCH) \
-		--build-arg OIDC_SERVER_VERSION=$(OIDC_SERVER_VERSION) \
 		--build-arg OIDC_SERVER_ARCH=$(OIDC_SERVER_ARCH) \
 		-t ghcr.io/jr200/nats-iam-broker:debug \
 		.

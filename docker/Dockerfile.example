@@ -1,6 +1,7 @@
 ARG OIDC_SERVER_ARCH
-ARG OIDC_SERVER_VERSION
-ARG GOVERSION=1.23
+# https://github.com/vdbulcke/oidc-server-demo/releases
+ARG OIDC_SERVER_VERSION=v0.9.0
+ARG GOVERSION=1.24
 
 FROM golang:${GOVERSION}-alpine AS builder
 
@@ -10,13 +11,13 @@ ARG BUILD_OS
 RUN apk update && apk add --no-cache git bash curl jq make 
 
 # https://github.com/nats-io/nats-server/releases
-RUN go install github.com/nats-io/nats-server/v2@v2.11.0
+RUN go install github.com/nats-io/nats-server/v2@v2.11.4
 
 # https://github.com/nats-io/natscli/releases
-RUN go install github.com/nats-io/natscli/nats@v0.2.0
+RUN go install github.com/nats-io/natscli/nats@v0.2.3
 
 # https://github.com/nats-io/nsc/releases
-RUN go install github.com/nats-io/nsc/v2@v2.10.2
+RUN go install github.com/nats-io/nsc/v2@v2.11.0
 
 WORKDIR /usr/src/app
 

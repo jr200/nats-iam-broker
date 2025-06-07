@@ -44,7 +44,7 @@ function create_minting_account() {
   nsc add user --account "${account}" --name nobody --deny-pubsub ">"
   nsc add user --account "${account}" --name minter
 
-	nsc generate nkey --curve 2>  "${path}"/acct-encryption-key.xk
+	nsc generate nkey --curve >  "${path}"/acct-encryption-key.xk
 
   minter_pubkey=$(nsc describe user --account "${account}" --name minter --field sub | jq -r)
   encryption_pubkey=$(sed -n 2,1p "${path}"/acct-encryption-key.xk)
