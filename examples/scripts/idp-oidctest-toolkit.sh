@@ -14,7 +14,7 @@ function idp_oidctest_login_public() {
     SESSION_ID=$(curl -X POST -s -d "user=${username}" -d "password=${password}" -H 'Accept: application/json' "${IDP_URL}" | jq -r '.id')
     # echo $SESSION_ID
 
-    LOCATION_HEADER=$(curl -s -D - -o /dev/null -b "lemonldap=${SESSION_ID}" "${IDP_URL}authorize?response_type=code&client_id=public&scope=openid+profile+email&redirect_uri=http://localhost" | grep -i '^location')
+    LOCATION_HEADER=$(curl -s -D - -o /dev/null -b "lemonldap=${SESSION_ID}" "${IDP_URL}authorize?response_type=code&client_id=public&scope=openid&redirect_uri=http://localhost" | grep -i '^location')
     # echo $LOCATION_HEADER
 
     CODE=$(echo "${LOCATION_HEADER}" | sed -n 's/.*code=\([^&]*\).*/\1/p')
@@ -35,7 +35,7 @@ function idp_oidctest_login_private() {
     SESSION_ID=$(curl -X POST -s -d "user=${username}" -d "password=${password}" -H 'Accept: application/json' "${IDP_URL}" | jq -r '.id')
     # echo $SESSION_ID
 
-    LOCATION_HEADER=$(curl -s -D - -o /dev/null -b "lemonldap=${SESSION_ID}" "${IDP_URL}authorize?response_type=code&client_id=private&scope=openid+profile+email&redirect_uri=http://localhost" | grep -i '^location')
+    LOCATION_HEADER=$(curl -s -D - -o /dev/null -b "lemonldap=${SESSION_ID}" "${IDP_URL}authorize?response_type=code&client_id=private&scope=openid&redirect_uri=http://localhost" | grep -i '^location')
     # echo $LOCATION_HEADER
 
     CODE=$(echo "${LOCATION_HEADER}" | sed -n 's/.*code=\([^&]*\).*/\1/p')
