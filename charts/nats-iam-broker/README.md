@@ -77,7 +77,8 @@ The following table lists the configurable parameters of the `nats-iam-broker` c
 | `config.app.name`                                         | The name of the NATS microservice                                                         | `my-nats-iam-broker`              |
 | `config.app.description`                                  | A description for the NATS microservice                                                   | `my-nats-iam-broker auth-callout` |
 | `config.app.nats.url`                                     | URL of the NATS server                                                                    | `nats.nats.svc:4222`              |
-| `config.app.nats.jwtExpiry`                               | Expiration duration of granted NATS user JWTs                                             | `1h15m`                           |
+| `config.app.nats.jwtExpiry.min`                           | Minimum expiration duration of granted NATS user JWTs                                     | `1m`                              |
+| `config.app.nats.jwtExpiry.max`                           | Maximum expiration duration of granted NATS user JWTs                                     | `1h15m`                           |
 | `config.app.natsMicroService.userCredsFile`               | Path to the NATS user credentials file - this is the user the nats-iam-broker runs as     | `""`                              |
 | `config.app.natsMicroService.account.name`                | The name of the decentralized NATS account                                                | `""`                              |
 | `config.app.natsMicroService.account.signingNkey.type`    | The type of key storage (raw, env, file)                                                  | `file`                            |

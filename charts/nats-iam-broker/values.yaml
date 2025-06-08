@@ -77,6 +77,10 @@ config:
       # URLs of the identity provider issuer
       issuer_url: https://oidctest.wsweet.org/
 
+      # whether to fail if this idp is unavailable
+      ignore_setup_error: false
+
+
       validation:
         # claims required to be present on the incoming JWT validation
         claims:
@@ -95,6 +99,9 @@ config:
 
   # role-based access control configuration section
   rbac:
+
+    tokenMaxExpiration: 8h
+
     # configuration of decentralised accounts that can sign newly minted
     # NATS user JWTs
     accounts:
@@ -135,6 +142,7 @@ config:
     bindings:
       []
       # - match: { claim: aud, value: public }
+      #   token_max_expiration: 24h
       #   user_account: APP1
       #   roles:
       #     - streaming

@@ -194,7 +194,7 @@ chart-template: chart-deps
 .PHONY: chart-dry-run
 chart-dry-run:
 	helm install \
-		-n $(K8S_NAMESPACE) 
+		-n $(K8S_NAMESPACE) \
 		-f $(VALUES_PATH) \
 		--generate-name \
 		--dry-run \

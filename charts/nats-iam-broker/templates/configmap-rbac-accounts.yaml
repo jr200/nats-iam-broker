@@ -6,6 +6,7 @@ metadata:
 data:
   rbac-accounts.yaml: |
     rbac:
+      token_max_expiration: {{ .Values.config.rbac.tokenMaxExpiration }}
       user_accounts:
       {{- range .Values.config.rbac.accounts }}
         - name: {{ .name }}
