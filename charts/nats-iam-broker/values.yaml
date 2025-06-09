@@ -193,10 +193,18 @@ resources:
   #   memory: 128Mi
 
 # Additional volumes on the output Deployment definition.
-volumes: []
+volumes:
+  []
+  # - name: nats-secrets
+  #   secret:
+  #     secretName: nats-secrets
 
 # Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
+volumeMounts:
+  []
+  # - name: nats-secrets
+  #   mountPath: /etc/nats/secrets
+  #   readOnly: true
 
 # Node selector for pod scheduling
 nodeSelector: {}
