@@ -15,7 +15,7 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.4.1
+version: 0.2.0
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
@@ -23,8 +23,4 @@ version: 0.4.1
 # It is recommended to use it with quotes.
 appVersion: "v0.4.1"
 
-dependencies:
-  - name: vault-actions
-    version: ~0.1.0
-    condition: vault-actions.enabled
-    repository: https://jr200.github.io/helm-charts
+dependencies: []

@@ -1,6 +1,3 @@
-dependencies:
-- name: vault-actions
-  repository: https://jr200.github.io/helm-charts
-  version: 0.1.0
-digest: sha256:97cb234857c08f073577d9ef5926ec4279177d2178dcb9e7d7b44600f704ed91
-generated: "2024-09-18T14:32:55.799136+01:00"
+dependencies: []
+digest: sha256:643d5437104296e21d906ecb15b2c96ad278f20cfc4af53b12bb6069bd853726
+generated: "2025-06-10T10:55:23.956433+01:00"

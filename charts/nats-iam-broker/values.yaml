@@ -27,92 +27,9 @@ logging:
   level: info # Set logging level: error, warn, info, debug, trace
 
 config:
-  params:
-    # The left delimiter for template parsing
-    left_delim: "<<<"
-    # The right delimiter for template parsing
-    right_delim: ">>>"
-
-  app:
-    # The name of the NATS microservice
-    name: my-nats-iam-broker
-    # A description for the NATS microservice
-    description: my-nats-iam-broker auth-callout
-
-    nats:
-      # URL of the NATS server
-      url: nats.nats.svc:4222
-      # expiration duration of granted NATS user JWTs
-      jwtExpiry:
-        min: 1m
-        max: 1h15m
-
-    natsMicroService:
-      # Path to the NATS user credentials file - this is the user the nats-iam-broker runs as
-      userCredsFile: /vault/secrets/iam-broker/u-minter.creds
-
-      # configuration for the account running the nats-iam-broker microservice
-      account:
-        # The name of the decentralised NATS account
-        name: MINT
-        # signing key for the NATS account
-        signingNkey:
-          type: file # The type of key storage (raw, env, file)
-          value: /vault/secrets/iam-broker/a-signer.nk
-
-      # configure encryption between the NATS server and the nats-iam-broker microservice
-      encryption:
-        enabled: true
-        # private encryption xkey used to secure communication
-        xkeySecret:
-          type: file # The type of key storage (raw, env, file)
-          value: /vault/secrets/service/xkey.nk
-
-  # configuration of the third-party identity provider that supplied the JWT token
-  idp:
-    - description: oidc-public
-      # The client ID for the identity provider
-      client_id: public
-
-      # URLs of the identity provider issuer
-      issuer_url: https://oidctest.wsweet.org/
-
-      # whether to fail if this idp is unavailable
-      ignore_setup_error: false
-
-
-      validation:
-        # claims required to be present on the incoming JWT validation
-        claims:
-          - aud
-          - iat
-          - exp
-          - sub
-        # Expected values for the audience claim of the JWT
-        # to skip this check set it to []
-        aud:
-          - public
-        # acceptable expiration bounds for incoming JWT
-        exp:
-          min: 1m0s
-          max: 2h
-
   # role-based access control configuration section
   rbac:
-
     tokenMaxExpiration: 8h
-
-    # configuration of decentralised accounts that can sign newly minted
-    # NATS user JWTs
-    accounts:
-      []
-      # - name: my-app
-      #   publicKey:
-      #     type: file # The type of key storage (raw, env, file)
-      #     value: /vault/secrets/rbac/my-app/a-identity.pub
-      #   signingNkey:
-      #     type: file # The type of key storage (raw, env, file)
-      #     value: /vault/secrets/rbac/my-app/a-sign.nk
 
     # configuration of roles (groups of permissions + limits) that can be attached to
     # minted NATS user JWTs
@@ -139,11 +56,12 @@ config:
       #     data: 65536
 
     # configuration to associate RBAC roles to RBAC accounts
-    bindings:
+    role_binding:
       []
-      # - match: { claim: aud, value: public }
+      # - user_account: APP1
       #   token_max_expiration: 24h
-      #   user_account: APP1
+      #   match:
+      #     - { claim: aud, value: public }
       #   roles:
       #     - streaming
 
@@ -177,6 +95,79 @@ securityContext:
   # readOnlyRootFilesystem: true
   # runAsNonRoot: true
   # runAsUser: 1000
+
+# -- Environment variables for the nats-iam-broker container
+env:
+  # -- Account name for the IAM service (required)
+  - name: IAM_ACCOUNT_NAME
+    value: "MINT"
+
+  # -- Service name
+  # defaults to <IAM_ACCOUNT_NAME>-iam-broker-svc
+  - name: IAM_NAME
+    value: ""  
+    
+  # -- Service description
+  # defaults to <IAM_ACCOUNT_NAME> IAM Broker
+  - name: IAM_DESCRIPTION
+    value: ""
+
+  # -- Internal version of this IAM nats-microservice (required)  
+  # 
+  # This can be used, for example, to version deployments of rbac configs
+  # independently of the helm chart version.
+  - name: IAM_VERSION
+    value: "0.1.0"
+
+  # -- Primary Idp Issuer URL (required)
+  - name: IDP_ISSUER_URL 
+    value: "https://sso.ebotmore.com"
+    
+  # -- Primary Idp ClientIds (required)
+  - name: IDP_CLIENT_ID
+    value: "310313383524106453"
+    
+  # -- NATS server URL
+  - name: NATS_URL
+    value: "nats://nats-sand.ebotmore.com:4222"
+    
+  # -- Primary Idp Description
+  - name: IDP_DESCRIPTION
+    value: "Zitadel Identity Provider"
+    
+  # -- Delay before starting service
+  - name: IAM_STARTUP_DELAY
+    value: "10s"
+    
+  # -- CSVs of port-forwards; item format: <ext_host>:<ext_port>:<container_port>
+  - name: IAM_PORT_FORWARDS
+    value: ""
+    
+  # -- Glob for config files
+  - name: IAM_CONFIGS
+    value: "/config/*.yaml"
+    
+  # -- Path to encryption key
+  # defaults to /secrets/<iam_account_name>-enc.xk
+  - name: IAM_SERVICE_XK
+    value: ""
+    
+  # -- Expiration time of minted NATS JWT
+  - name: IAM_JWT_EXP
+    value: "1h15m"
+    
+  # -- Path to signing key
+  - name: IAM_ACCOUNT_SIGNK
+    value: ""  # defaults to /secrets/<iam_account_name>-sk-1.nk
+    
+  # -- Path to user credentials
+  # defaults to /secrets/<iam_account_name>-ac-user.creds
+  - name: IAM_USER_CREDS
+    value: ""
+    
+  # -- CSVs of accounts to be minted. Sets env-vars APP_ACCT_<idx>, APP_SK_<idx>, APP_ID_<idx>
+  - name: APP_AUTO_ACCOUNT
+    value: ""
 
 # Resource requests and limits for the container
 resources:
@@ -214,84 +205,3 @@ tolerations: []
 
 # Affinity rules for pod scheduling
 affinity: {}
-
-vault:
-  # Enable or disable Vault-Agent Sidecar Injector
-  enabled: false
-
-  # The URL of the Vault server
-  url: http://vault.vault.svc
-  # The vault role to assume for the vault-agent init container
-  brokerRole: my-nats-iam-broker-role
-
-  # The Vault kubernetes authentication mount path
-  authMount: auth/kubernetes
-
-  # Path to the xkey secret in Vault
-  xkeySecret: kv/data/nats/xkey/operator/my-op/account/my-acct
-
-  # Path to the mint signing key in Vault
-  mintSigningNKey: nats/nkey/operator/my-op/account/my-acct/signing/my-acct-ask1
-
-  # Path to the mint user credentials in Vault
-  mintUserCreds: nats/creds/operator/my-op/account/my-acct/user/my-acct-user
-
-  # List of additional RBAC account credentials to fetch from Vault
-  rbacCredentials:
-    - name: APP1
-      accountPubKey: nats/nkey/operator/my-op/account/app1
-      signingNkey: nats/nkey/operator/my-op/account/app1/signing/app1-ask1
-
-# vault-actions subchart used to create a policy that grants the Vault-Agent Sidecar
-# Injector permissions to the paths listed in the .Values.vault section.
-# note: this chart automatically infers and constructs the required policy.
-# see: https://github.com/jr200/vault-actions
-vault-actions:
-  # Enable or disable Vault actions
-  enabled: false
-  # Enable or disable debug mode for Vault actions
-  devDebug: false
-
-  hookConfiguration:
-    # The hook phase for Vault actions
-    hook: pre-install
-    # The weight for hook ordering
-    hookWeight: -5
-    # The delete policy for the hook
-    hookDeletePolicy: before-hook-creation,hook-succeeded
-
-  # The bootstrap token for Vault actions
-  # this can either be a regular token with a superset of the required policies
-  # or a minimal policy generated by the vault-actions component.
-  #
-  # To obtain instructions to build the minimal token, run this chart with a null
-  # or invalid token, and observe the output of the failed vault-actions pod.
-  bootstrapToken: ~
-
-  # The name of the secret for vault-actions bootstrap
-  secretName: va-bootstrap-secret
-
-  # the name of the created policy, used by the vault-agent sidecar injector
-  policyName: my-nats-iam-broker-policy
-
-  config:
-    bootstrap:
-      # Clean up the bootstrap policy after installation
-      cleanup_after_install: true
-      params:
-        # Display name for the bootstrap
-        display-name: nats-bootstrap
-        # Maximum TTL for the bootstrap token
-        explicit-max-ttl: 5m
-        # Whether the bootstrap token is renewable
-        renewable: false
-        # The TTL for the one-time use wrapping tokens
-        wrap-ttl: 60s
-        # The format for displaying secrets
-        format: table
-        # The field to use for wrapping tokens
-        field: wrapping_token
-
-    # Additional actions to perform during vault-actions bootstrap
-    # (probably not needed)
-    additionalActions: []
