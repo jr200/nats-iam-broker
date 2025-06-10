@@ -12,12 +12,6 @@ spec:
   template:
     metadata:
       annotations:
-        {{- if .Values.vault.enabled }}
-        vault.hashicorp.com/agent-inject: "true"
-        vault.hashicorp.com/agent-configmap: {{ include "nats-iam-broker.fullname" . }}-vault-agent
-        vault.hashicorp.com/agent-pre-populate-only: "true"
-        vault.hashicorp.com/agent-init-first: "true"
-        {{- end }}
       {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -44,65 +38,32 @@ spec:
           command: 
             - sleep
           args:
-          - infinity
+            - infinity
           {{- else }}
-          command:
-          - /usr/local/bin/nats-iam-broker
           args:
             - -log={{ .Values.logging.level }}
 {{- if not .Values.logging.json }}
             - -log-human
 {{- end }}
-            - /config/app.yaml
-            - /config/idp.yaml
-            - /config/rbac-accounts.yaml
-            - /config/rbac-roles.yaml
-            - /config/rbac-bindings.yaml
           {{- end }}
+          env:
+            {{- toYaml .Values.env | nindent 12 }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
-            - name: volume-config-app
-              mountPath: /config/app.yaml
-              subPath: app.yaml
-              readOnly: true
-            - name: volume-config-idp
-              mountPath: /config/idp.yaml
-              subPath: idp.yaml
-              readOnly: true
-            - name: volume-config-rbac-accounts
-              mountPath: /config/rbac-accounts.yaml
-              subPath: rbac-accounts.yaml
-              readOnly: true
-            - name: volume-config-rbac-roles
-              mountPath: /config/rbac-roles.yaml
-              subPath: rbac-roles.yaml
-              readOnly: true
-            - name: volume-config-rbac-bindings
-              mountPath: /config/rbac-bindings.yaml
-              subPath: rbac-bindings.yaml
+            - name: volume-config-rbac
+              mountPath: /config/40-rbac.yaml
+              subPath: 40-rbac.yaml
               readOnly: true
             {{- if .Values.volumeMounts }}
-            {{ toYaml .Values.volumeMounts | indent 12 }}
+            {{ toYaml .Values.volumeMounts | nindent 12 }}
             {{- end }}
       volumes:
-        - name: volume-config-app
+        - name: volume-config-rbac
           configMap:
-            name: {{ include "nats-iam-broker.fullname" . }}-app
-        - name: volume-config-idp
-          configMap:
-            name: {{ include "nats-iam-broker.fullname" . }}-idp
-        - name: volume-config-rbac-accounts
-          configMap:
-            name: {{ include "nats-iam-broker.fullname" . }}-rbac-accounts
-        - name: volume-config-rbac-roles
-          configMap:
-            name: {{ include "nats-iam-broker.fullname" . }}-rbac-roles
-        - name: volume-config-rbac-bindings
-          configMap:
-            name: {{ include "nats-iam-broker.fullname" . }}-rbac-bindings
+            name: {{ include "nats-iam-broker.fullname" . }}-rbac
         {{- if .Values.volumes }}
-        {{ toYaml .Values.volumes | indent 8 }}
+        {{ toYaml .Values.volumes | nindent 8 }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

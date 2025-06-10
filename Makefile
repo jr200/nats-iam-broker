@@ -176,7 +176,6 @@ chart-deps:
 chart-install: chart-deps
 	helm upgrade -n $(K8S_NAMESPACE) nats-iam-broker charts/nats-iam-broker \
 		--install \
-		--set vault-actions.bootstrapToken=$(VAULT_TOKEN) \
 		-f $(VALUES_PATH)
 
 ################################################################################
@@ -185,7 +184,6 @@ chart-install: chart-deps
 .PHONY: chart-template
 chart-template: chart-deps
 	helm template -n $(K8S_NAMESPACE) nats-iam-broker charts/nats-iam-broker \
-		--set vault-actions.bootstrapToken=$(VAULT_TOKEN) \
 		-f $(VALUES_PATH)
 
 ################################################################################
@@ -194,12 +192,11 @@ chart-template: chart-deps
 .PHONY: chart-dry-run
 chart-dry-run:
 	helm install \
-		-n $(K8S_NAMESPACE) 
+		-n $(K8S_NAMESPACE) \
 		-f $(VALUES_PATH) \
 		--generate-name \
 		--dry-run \
 		--debug \
-		--set vault-actions.bootstrapToken=$(VAULT_TOKEN) \
 		charts/nats-iam-broker
 
 ################################################################################
