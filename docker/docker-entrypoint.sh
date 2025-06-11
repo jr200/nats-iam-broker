@@ -31,7 +31,7 @@ help() {
     echo "  IAM_JWT_EXP         Expiration time of minted NATS JWT (default: 1h15m)"
     echo "  IAM_ACCOUNT_SIGNK   Path to signing key (default: /secrets/<iam_account_name>-sk-1.nk)"
     echo "  IAM_USER_CREDS      Path to user credentials (default: /secrets/<iam_account_name>-ac-user.creds)"
-    echo "  APP_AUTO_ACCOUNT    CSVs of accounts to be minted. Sets env-vars APP_ACCT_<idx>, APP_SK_<idx>, APP_ID_<idx>"
+    echo "  APP_AUTO_ACCOUNTS   CSVs of accounts to be minted. Sets env-vars APP_ACCT_<idx>, APP_SK_<idx>, APP_ID_<idx>"
 }
 
 # Show help if requested
@@ -70,11 +70,11 @@ set_env_or_default IAM_USER_CREDS "${IAM_SECRETS_DIR}/${IAM_ACCOUNT_NAME}-ac-use
 
 # Create temp directory for all account configs
 AUTOGEN_CONFIGS_DIR=$(mktemp -d)
+num_auto_accounts=0
 
 if [ -n "${APP_AUTO_ACCOUNTS}" ]; then
     
     IFS=',' read -ra ACCOUNTS <<< "${APP_AUTO_ACCOUNTS}"
-    idx=1
     for account in "${ACCOUNTS[@]}"; do
         echo "Setting expanded environment variables for ${account}"
 
@@ -85,10 +85,10 @@ if [ -n "${APP_AUTO_ACCOUNTS}" ]; then
            --arg sk "{{ readFile \"${IAM_SECRETS_DIR}/${account}-sk-1.nk\" | trim }}" \
            '{rbac: {user_accounts: [{name: $name, public_key: $pub, signing_nkey: $sk}]}}' \
            > "${AUTOGEN_CONFIGS_DIR}/user_accounts-${account}.yaml"
-        idx=$((idx + 1))
+        num_auto_accounts=$((num_auto_accounts + 1))
     done
 
-    echo "Wrote ${idx} account configuration files to ${AUTOGEN_CONFIGS_DIR}"
+    echo "Wrote ${num_auto_accounts} account configuration files to ${AUTOGEN_CONFIGS_DIR}"
 fi
 
 echo "Waiting ${IAM_STARTUP_DELAY} before startup..."
@@ -111,5 +111,10 @@ fi
 # start the nats-iam-broker
 echo "[CMD]" "nats-iam-broker" "$@" "${IAM_CONFIGS}" "${AUTOGEN_CONFIGS_DIR}/*.yaml"
 
-# shellcheck disable=SC2086 # Allow word splitting and glob expansion for user args ($@) and config path (${IAM_CONFIGS})
-nats-iam-broker $@ ${IAM_CONFIGS} ${AUTOGEN_CONFIGS_DIR}/*.yaml
+if [ ${num_auto_accounts} -gt 0 ]; then
+    # shellcheck disable=SC2086 # Allow word splitting and glob expansion for user args ($@) and config path (${IAM_CONFIGS})
+    nats-iam-broker $@ ${IAM_CONFIGS} ${AUTOGEN_CONFIGS_DIR}/*.yaml
+else
+    # shellcheck disable=SC2086 # Allow word splitting and glob expansion for user args ($@) and config path (${IAM_CONFIGS})
+    nats-iam-broker $@ ${IAM_CONFIGS}
+fi

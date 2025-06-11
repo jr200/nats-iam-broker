@@ -166,7 +166,7 @@ env:
     value: ""
     
   # -- CSVs of accounts to be minted. Sets env-vars APP_ACCT_<idx>, APP_SK_<idx>, APP_ID_<idx>
-  - name: APP_AUTO_ACCOUNT
+  - name: APP_AUTO_ACCOUNTS
     value: ""
 
 # Resource requests and limits for the container
