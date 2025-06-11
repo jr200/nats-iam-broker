@@ -104,7 +104,7 @@ func (c *Config) lookupAccountInfo(userAccount string) (*UserAccountInfo, error)
 		}
 	}
 
-	return nil, fmt.Errorf("unknown user-account: %s", userAccount)
+	return nil, fmt.Errorf("unknown user-account info: %s", userAccount)
 }
 
 // evaluateMatchCriterion checks if a single Match criterion is met by the context.

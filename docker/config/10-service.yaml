@@ -4,6 +4,9 @@ params:
 
 nats:
   url: '{{ env "NATS_URL" }}'
+  token_bounds:
+    min: 1m
+    max: 24h
 
 service:
   name: '{{ env "IAM_NAME" }}'
@@ -17,6 +20,3 @@ service:
     encryption:
       enabled: true
       xkey_secret: '{{ readNthLine 1 (env "IAM_SERVICE_XK") }}'
-
-nats_jwt:
-  exp_max: '{{ env "IAM_JWT_EXP" }}'

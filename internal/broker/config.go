@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -377,7 +378,7 @@ func improveYAMLErrorMessage(err error) error {
 
 // mergeConfigurationFiles merges the given YAML files into a single YAML string
 func mergeConfigurationFiles(files []string) (string, error) {
-	var mergedMap map[string]interface{}
+	var mergedMap map[interface{}]interface{}
 
 	for _, filePath := range files {
 		log.Debug().Msgf("merging config %s", filePath)
@@ -386,32 +387,18 @@ func mergeConfigurationFiles(files []string) (string, error) {
 			return "", fmt.Errorf("error reading file content: %v", err)
 		}
 
-		var currentMap map[string]interface{}
-		if err := yaml.Unmarshal(raw, &currentMap); err != nil {
+		var nextMapToMerge map[interface{}]interface{}
+		if err := yaml.Unmarshal(raw, &nextMapToMerge); err != nil {
 			return "", fmt.Errorf("error in file %s: %v", filePath, improveYAMLErrorMessage(err))
 		}
 
 		if mergedMap == nil {
-			mergedMap = currentMap
+			mergedMap = nextMapToMerge
 			continue
 		}
 
-		// Merge the maps with special handling for idp list
-		for k, v := range currentMap {
-			if k == "idp" {
-				// Handle idp list merging
-				if currentIdps, ok := v.([]interface{}); ok {
-					if existingIdps, exists := mergedMap["idp"].([]interface{}); exists {
-						mergedMap["idp"] = append(existingIdps, currentIdps...)
-					} else {
-						mergedMap["idp"] = currentIdps
-					}
-				}
-			} else {
-				// For other keys, take the latest value
-				mergedMap[k] = v
-			}
-		}
+		// Recursively merge the maps
+		mergedMap = deepMerge(mergedMap, nextMapToMerge)
 	}
 
 	mergedYAML, err := yaml.Marshal(mergedMap)
@@ -420,6 +407,52 @@ func mergeConfigurationFiles(files []string) (string, error) {
 	}
 
 	return string(mergedYAML), nil
+}
+
+func deepMerge(base, overlay map[interface{}]interface{}) map[interface{}]interface{} {
+	result := make(map[interface{}]interface{})
+
+	// Copy base map
+	for k, v := range base {
+		result[k] = v
+	}
+
+	// Merge overlay map
+	for k, v := range overlay {
+		if baseVal, exists := result[k]; exists {
+			baseType := reflect.TypeOf(baseVal)
+			overlayType := reflect.TypeOf(v)
+
+			if baseType != overlayType {
+				panic(fmt.Sprintf("Type mismatch for key '%s': cannot merge %v with %v", k, baseType, overlayType))
+			}
+
+			// If both values are arrays, concatenate them
+			if baseArr, ok := baseVal.([]interface{}); ok {
+				if overlayArr, ok := v.([]interface{}); ok {
+					result[k] = append(baseArr, overlayArr...)
+					continue
+				}
+			}
+
+			// If both values are maps, merge them recursively
+			if baseMap, ok := baseVal.(map[interface{}]interface{}); ok {
+				if overlayMap, ok := v.(map[interface{}]interface{}); ok {
+					result[k] = deepMerge(baseMap, overlayMap)
+					continue
+				}
+			}
+
+			// For primitive types (strings, numbers, bools), overlay value takes precedence
+			result[k] = v
+			continue
+		}
+
+		// If key doesn't exist in base, add from overlay
+		result[k] = v
+	}
+
+	return result
 }
 
 // validateSemVer validates that a version string is a valid semantic version
