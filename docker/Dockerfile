@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.source="https://github.com/jr200/nats-iam-broker"
 LABEL org.opencontainers.image.description="nats-iam-broker runtime stage"
 
 RUN apk add --no-cache bash && \
-    apk add --no-cache --update ca-certificates
+    apk add --no-cache --update ca-certificates jq
 
 WORKDIR /usr/src/app
 

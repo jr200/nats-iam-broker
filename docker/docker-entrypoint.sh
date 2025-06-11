@@ -26,6 +26,7 @@ help() {
     echo "  IAM_CONFIGS         Glob for config files (default: /config/*.yaml)"
     echo "  IAM_NAME            Service name (default: <iam_account_name>-iam-broker-svc)"
     echo "  IAM_DESCRIPTION     Service description (default: <iam_account_name> IAM Broker)"
+    echo "  IAM_SECRETS_DIR     Directory containing secrets (default: /secrets)"
     echo "  IAM_SERVICE_XK      Path to encryption key (default: /secrets/<iam_account_name>-enc.xk)"
     echo "  IAM_JWT_EXP         Expiration time of minted NATS JWT (default: 1h15m)"
     echo "  IAM_ACCOUNT_SIGNK   Path to signing key (default: /secrets/<iam_account_name>-sk-1.nk)"
@@ -60,24 +61,34 @@ set_env_or_default IAM_STARTUP_DELAY "10s"
 set_env_or_default IAM_JWT_EXP "1h15m"
 set_env_or_default IAM_NAME "${IAM_ACCOUNT_NAME}-iam-broker-svc"
 set_env_or_default IAM_DESCRIPTION "${IAM_ACCOUNT_NAME} JWT IAM Service"
-set_env_or_default IAM_SERVICE_XK "/secrets/${IAM_ACCOUNT_NAME}-enc.xk"
-set_env_or_default IAM_ACCOUNT_SIGNK "/secrets/${IAM_ACCOUNT_NAME}-sk-1.nk"
-set_env_or_default IAM_USER_CREDS "/secrets/${IAM_ACCOUNT_NAME}-ac-user.creds"
+set_env_or_default IAM_SECRETS_DIR "/secrets"
+set_env_or_default IAM_SERVICE_XK "${IAM_SECRETS_DIR}/${IAM_ACCOUNT_NAME}-enc.xk"
+set_env_or_default IAM_ACCOUNT_SIGNK "${IAM_SECRETS_DIR}/${IAM_ACCOUNT_NAME}-sk-1.nk"
+set_env_or_default IAM_USER_CREDS "${IAM_SECRETS_DIR}/${IAM_ACCOUNT_NAME}-ac-user.creds"
 
 # Auto-generate accounts if APP_AUTO_ACCOUNTS is set
+
+# Create temp directory for all account configs
+AUTOGEN_CONFIGS_DIR=$(mktemp -d)
+
 if [ -n "${APP_AUTO_ACCOUNTS}" ]; then
+    
     IFS=',' read -ra ACCOUNTS <<< "${APP_AUTO_ACCOUNTS}"
     idx=1
     for account in "${ACCOUNTS[@]}"; do
         echo "Setting expanded environment variables for ${account}"
 
-        # Set environment variables for this account
-        export "APP_ACCT_${idx}=${account}"
-        export "APP_SK_${idx}=/secrets/${account}-sk-1.nk"
-        export "APP_ID_${idx}=/secrets/${account}-id-1.pub"
-        
+        # create user_accounts config for account using jq
+        jq -n \
+           --arg name "$account" \
+           --arg pub "{{ readFile \"${IAM_SECRETS_DIR}/${account}-id-1.pub\" | trim }}" \
+           --arg sk "{{ readFile \"${IAM_SECRETS_DIR}/${account}-sk-1.nk\" | trim }}" \
+           '{rbac: {user_accounts: [{name: $name, public_key: $pub, signing_nkey: $sk}]}}' \
+           > "${AUTOGEN_CONFIGS_DIR}/user_accounts-${account}.yaml"
         idx=$((idx + 1))
     done
+
+    echo "Wrote ${idx} account configuration files to ${AUTOGEN_CONFIGS_DIR}"
 fi
 
 echo "Waiting ${IAM_STARTUP_DELAY} before startup..."
@@ -98,7 +109,7 @@ if [ "${DEBUG}" = "1" ]; then
 fi
 
 # start the nats-iam-broker
-echo "[CMD]" "nats-iam-broker" "$@" "${IAM_CONFIGS}"
+echo "[CMD]" "nats-iam-broker" "$@" "${AUTOGEN_CONFIGS_DIR}/*.yaml" "${IAM_CONFIGS}"
 
 # shellcheck disable=SC2086 # Allow word splitting and glob expansion for user args ($@) and config path (${IAM_CONFIGS})
-nats-iam-broker $@ ${IAM_CONFIGS}
+nats-iam-broker $@ ${AUTOGEN_CONFIGS_DIR}/*.yaml ${IAM_CONFIGS}
