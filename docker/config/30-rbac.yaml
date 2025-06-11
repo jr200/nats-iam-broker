@@ -1,4 +1,6 @@
 rbac:
+  token_max_expiration: 24h
+
   # accounts specified in APP_AUTO_ACCOUNTS will be auto-generated and loaded on startup
   #  e.g., if APP_AUTO_ACCOUNTS=XX,YY
   #  the following will be generated:
@@ -8,9 +10,11 @@ rbac:
   #  ...etc...
   user_accounts: []
 
+  role_binding_matching_strategy: best_match
   role_binding: []
     # - match: { claim: preferred_username, value: 'admin' }
     #   user_account: XX
+    #   token_max_expiration: 1h
     #   roles: []
     #     - can-api
     #     - streaming

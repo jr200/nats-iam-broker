@@ -137,6 +137,7 @@ func Start(configFiles []string, serverOpts *Options) error {
 		userAccountName, permissions, limits, roleBindingTokenMaxExpiry := cfgForRequest.lookupUserAccount(reqClaims.toMap())
 		userAccountInfo, err := config.lookupAccountInfo(userAccountName)
 		if err != nil {
+			log.Error().Err(err).Msg("error looking up account-info")
 			return nil, nil, nil, err
 		}
 

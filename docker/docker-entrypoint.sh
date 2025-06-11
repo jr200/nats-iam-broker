@@ -109,7 +109,7 @@ if [ "${DEBUG}" = "1" ]; then
 fi
 
 # start the nats-iam-broker
-echo "[CMD]" "nats-iam-broker" "$@" "${AUTOGEN_CONFIGS_DIR}/*.yaml" "${IAM_CONFIGS}"
+echo "[CMD]" "nats-iam-broker" "$@" "${IAM_CONFIGS}" "${AUTOGEN_CONFIGS_DIR}/*.yaml"
 
 # shellcheck disable=SC2086 # Allow word splitting and glob expansion for user args ($@) and config path (${IAM_CONFIGS})
-nats-iam-broker $@ ${AUTOGEN_CONFIGS_DIR}/*.yaml ${IAM_CONFIGS}
+nats-iam-broker $@ ${IAM_CONFIGS} ${AUTOGEN_CONFIGS_DIR}/*.yaml
