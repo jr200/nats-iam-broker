@@ -165,7 +165,7 @@ env:
   - name: IAM_USER_CREDS
     value: ""
     
-  # -- CSVs of accounts to be minted. Sets env-vars APP_ACCT_<idx>, APP_SK_<idx>, APP_ID_<idx>
+  # -- CSVs of accounts the IAM service can mint users for
   - name: APP_AUTO_ACCOUNTS
     value: ""
 
