@@ -15,7 +15,7 @@ helm repo add jr200 https://jr200.github.io/helm-charts/
 helm install my-iam-broker jr200/nats-iam-broker
 ```
 
-### kubernetes secrets
+### Kubernetes Secrets
 
 A set of credentials (secrets) must be mounted into the nats-iam-broker pod.
 These credentials are:
@@ -27,11 +27,11 @@ These credentials are:
   - the public key
   - the signing key
 
-A script is provided to help make these secrets.
+Given a folder of secrets, the script below will create a K8s Secrets yaml in the expected format.
 
 ```
 echo Creating kubernetes secrets...
-curl  -fsSL https://raw.githubusercontent.com/jr200/nats-infra/refs/heads/main/scripts/k8s-make-nats-secrets.sh | bash -s -- /Users/primary/code/jr200/janeway/janeway-infra/nats-secrets
+curl  -fsSL https://raw.githubusercontent.com/jr200/nats-infra/refs/heads/main/scripts/k8s-make-nats-secrets.sh | bash -s -- <<secrets_folder>>
 ```
 
 The generated `nats-secrets.yaml` can be uploaded to the nats-iam-broker target namespace.
