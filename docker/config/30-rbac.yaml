@@ -5,8 +5,8 @@ rbac:
   #  e.g., if APP_AUTO_ACCOUNTS=XX,YY
   #  the following user_accounts will be generated:
   #  - name: XX
-  #    public_key: '{{ readFile "/secrets/${account}-id-1.pub" | trim }}'
-  #    signing_nkey: '{{ readFile "/secrets/${account}-sk-1.pub" | trim }}'
+  #    public_key: '{{ readFile "/secrets/XX-id-1.pub" | trim }}'
+  #    signing_nkey: '{{ readFile "/secrets/XX-sk-1.pub" | trim }}'
   #  ...etc...
   user_accounts: []
 
