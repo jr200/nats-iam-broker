@@ -97,6 +97,13 @@ securityContext:
   # runAsUser: 1000
 
 # -- Environment variables for the nats-iam-broker container
+envFrom:
+  []
+  # - secretRef:
+  #     name: nats-secrets
+  # - configMapRef:
+  #     name: nats-iam-broker-config
+
 env:
   # -- Account name for the IAM service (required)
   - name: IAM_ACCOUNT_NAME
