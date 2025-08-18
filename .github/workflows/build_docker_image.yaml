@@ -7,6 +7,11 @@ on:
 
   workflow_dispatch:
     inputs:
+      checkout-ref:
+        description: "checkout ref"
+        required: false
+        type: string
+        default: "refs/heads/main"
       tag:
         description: docker-image-tag
         required: false
@@ -30,6 +35,7 @@ jobs:
     needs: configure
     uses: jr200/github-action-templates/.github/workflows/build_docker_image_multiplatform.yml@main
     with:
+      checkout-ref: ${{ fromJson(needs.configure.outputs.context).checkout-ref }}
       registry_name: ghcr.io
       image_name: ${{ github.repository }}
       tag: ${{ fromJson(needs.configure.outputs.context).tag }}

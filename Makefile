@@ -138,8 +138,7 @@ clean:
 .PHONY: docker-offical-build
 docker-offical-build:
 	echo GOARCH=$(GOARCH)
-	podman build \
-	    --layers \
+	docker build \
 		-f docker/Dockerfile \
 		--build-arg BUILD_OS=linux \
 		--build-arg BUILD_ARCH=$(GOARCH) \
@@ -152,8 +151,7 @@ docker-offical-build:
 .PHONY: docker-example-build
 docker-example-build:
 	echo GOARCH=$(GOARCH)
-	podman build \
-	    --layers \
+	docker build \
 		-f docker/Dockerfile.example \
 		--build-arg BUILD_OS=linux \
 		--build-arg BUILD_ARCH=$(GOARCH) \
