@@ -7,6 +7,11 @@ on:
 
   workflow_dispatch:
     inputs:
+      checkout-ref:
+        description: "checkout ref"
+        required: false
+        type: string
+        default: "refs/heads/main"
       chart_repo:
         description: "charts repo"
         required: true
@@ -29,6 +34,7 @@ jobs:
     needs: configure
     uses: jr200/github-action-templates/.github/workflows/build_helm_chart.yml@main
     with:
+      checkout-ref: ${{ fromJson(needs.configure.outputs.context).checkout-ref }}
       chart_repo: ${{ fromJson(needs.configure.outputs.context).chart_repo }}
       chart_dir: ${{ fromJson(needs.configure.outputs.context).chart_dir }}
     secrets:
