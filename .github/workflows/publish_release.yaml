@@ -7,6 +7,11 @@ on:
 
   workflow_dispatch:
     inputs:
+      checkout-ref:
+        description: "checkout ref"
+        required: false
+        type: string
+        default: "refs/heads/main"
       tag:
         description: "release-version"
         required: true
@@ -24,6 +29,7 @@ jobs:
     needs: configure
     uses: jr200/github-action-templates/.github/workflows/publish_release.yml@main
     with:
+      checkout-ref: ${{ fromJson(needs.configure.outputs.context).checkout-ref }}
       tag: ${{ fromJson(needs.configure.outputs.context).tag }}
     secrets:
       token: ${{ secrets.GITHUB_TOKEN }}
