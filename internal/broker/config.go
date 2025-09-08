@@ -4,17 +4,16 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"reflect"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/go-playground/validator"
+	"github.com/goccy/go-yaml"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
 	"github.com/rs/zerolog/log"
 	"github.com/xhit/go-str2duration/v2"
-	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -279,6 +278,84 @@ func (v *NKey) UnmarshalText(text []byte) error {
 	return nil
 }
 
+// UnmarshalYAML implements scalar decoding for Duration (supports strings, numbers, or maps with value/max/min)
+func (v *Duration) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	// Try string
+	var s string
+	if err := unmarshal(&s); err == nil {
+		return v.UnmarshalText([]byte(s))
+	}
+
+	// Try integer nanoseconds
+	var i64 int64
+	if err := unmarshal(&i64); err == nil {
+		v.Duration = time.Duration(i64)
+		return nil
+	}
+
+	// Try float nanoseconds
+	var f64 float64
+	if err := unmarshal(&f64); err == nil {
+		v.Duration = time.Duration(f64)
+		return nil
+	}
+
+	// Try map forms: {value: "1h"} or {max: "1h"} or {min: "1h"}
+	var m map[string]interface{}
+	if err := unmarshal(&m); err == nil {
+		for _, key := range []string{"value", "max", "min"} {
+			if val, ok := m[key]; ok {
+				switch vv := val.(type) {
+				case string:
+					return v.UnmarshalText([]byte(vv))
+				case int:
+					v.Duration = time.Duration(vv)
+					return nil
+				case int64:
+					v.Duration = time.Duration(vv)
+					return nil
+				case float64:
+					v.Duration = time.Duration(vv)
+					return nil
+				default:
+					return fmt.Errorf("invalid duration.%s type %T", key, vv)
+				}
+			}
+		}
+		return fmt.Errorf("invalid duration map keys %v", m)
+	}
+
+	// Fallback
+	var raw interface{}
+	if err := unmarshal(&raw); err != nil {
+		return err
+	}
+	switch x := raw.(type) {
+	case string:
+		return v.UnmarshalText([]byte(x))
+	case int:
+		v.Duration = time.Duration(x)
+		return nil
+	case int64:
+		v.Duration = time.Duration(x)
+		return nil
+	case float64:
+		v.Duration = time.Duration(x)
+		return nil
+	default:
+		return fmt.Errorf("invalid duration type %T", raw)
+	}
+}
+
+// UnmarshalYAML implements scalar decoding for NKey
+func (v *NKey) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var s string
+	if err := unmarshal(&s); err != nil {
+		return err
+	}
+	return v.UnmarshalText([]byte(s))
+}
+
 // Helper function to improve YAML unmarshaling error messages
 func improveYAMLErrorMessage(err error) error {
 	errMsg := err.Error()
@@ -378,7 +455,7 @@ func improveYAMLErrorMessage(err error) error {
 
 // mergeConfigurationFiles merges the given YAML files into a single YAML string
 func mergeConfigurationFiles(files []string) (string, error) {
-	var mergedMap map[interface{}]interface{}
+	var mergedMap map[string]interface{}
 
 	for _, filePath := range files {
 		log.Debug().Msgf("merging config %s", filePath)
@@ -387,7 +464,7 @@ func mergeConfigurationFiles(files []string) (string, error) {
 			return "", fmt.Errorf("error reading file content: %v", err)
 		}
 
-		var nextMapToMerge map[interface{}]interface{}
+		var nextMapToMerge map[string]interface{}
 		if err := yaml.Unmarshal(raw, &nextMapToMerge); err != nil {
 			return "", fmt.Errorf("error in file %s: %v", filePath, improveYAMLErrorMessage(err))
 		}
@@ -409,8 +486,8 @@ func mergeConfigurationFiles(files []string) (string, error) {
 	return string(mergedYAML), nil
 }
 
-func deepMerge(base, overlay map[interface{}]interface{}) map[interface{}]interface{} {
-	result := make(map[interface{}]interface{})
+func deepMerge(base, overlay map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
 
 	// Copy base map
 	for k, v := range base {
@@ -420,25 +497,18 @@ func deepMerge(base, overlay map[interface{}]interface{}) map[interface{}]interf
 	// Merge overlay map
 	for k, v := range overlay {
 		if baseVal, exists := result[k]; exists {
-			baseType := reflect.TypeOf(baseVal)
-			overlayType := reflect.TypeOf(v)
-
-			if baseType != overlayType {
-				panic(fmt.Sprintf("Type mismatch for key '%s': cannot merge %v with %v", k, baseType, overlayType))
+			// If both values are maps, merge them recursively
+			if baseMap, ok := baseVal.(map[string]interface{}); ok {
+				if overlayMap, ok := v.(map[string]interface{}); ok {
+					result[k] = deepMerge(baseMap, overlayMap)
+					continue
+				}
 			}
 
 			// If both values are arrays, concatenate them
 			if baseArr, ok := baseVal.([]interface{}); ok {
 				if overlayArr, ok := v.([]interface{}); ok {
 					result[k] = append(baseArr, overlayArr...)
-					continue
-				}
-			}
-
-			// If both values are maps, merge them recursively
-			if baseMap, ok := baseVal.(map[interface{}]interface{}); ok {
-				if overlayMap, ok := v.(map[interface{}]interface{}); ok {
-					result[k] = deepMerge(baseMap, overlayMap)
 					continue
 				}
 			}

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	internal "github.com/jr200/nats-iam-broker/internal"
-	"gopkg.in/yaml.v3"
 
 	"github.com/nats-io/jwt/v2"
 	"github.com/rs/zerolog/log"
@@ -23,9 +22,9 @@ const (
 )
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface for RoleBindingStrategy.
-func (rbs *RoleBindingStrategy) UnmarshalYAML(value *yaml.Node) error {
+func (rbs *RoleBindingStrategy) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var str string
-	if err := value.Decode(&str); err != nil {
+	if err := unmarshal(&str); err != nil {
 		return err
 	}
 
