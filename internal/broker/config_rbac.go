@@ -154,6 +154,16 @@ func evaluateMatchCriterion(match Match, context map[string]interface{}, binding
 				break
 			}
 		}
+	case map[string]interface{}:
+		if _, ok := v[match.Value]; ok {
+			isClaimMatched = true
+			log.Debug().Msgf("match-pass[%s]: key '%s' exists in map (Binding Index: %d)", match.Claim, match.Value, bindingIndex)
+		}
+	case map[string]string:
+		if _, ok := v[match.Value]; ok {
+			isClaimMatched = true
+			log.Debug().Msgf("match-pass[%s]: key '%s' exists in map (Binding Index: %d)", match.Claim, match.Value, bindingIndex)
+		}
 	default:
 		log.Trace().Msgf("match-skip[%s]: unsupported type %T (Binding Index: %d)", match.Claim, v, bindingIndex)
 		// Unsupported type cannot match the string value
