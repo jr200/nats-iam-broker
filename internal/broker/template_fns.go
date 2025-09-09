@@ -99,7 +99,16 @@ func renderAllTemplates(content string, mappings map[string]interface{}, params 
 	return result
 }
 
+func unescapeYAMLTemplate(input string) string {
+	// Unescape YAML double-quoted scalar escapes so template parser sees valid Go strings
+	input = strings.ReplaceAll(input, `\"`, `"`)
+	input = strings.ReplaceAll(input, `\\`, `\`)
+	return input
+}
+
 func tryRenderTemplate(input string, context map[string]interface{}, params ConfigParams) string {
+	processed := unescapeYAMLTemplate(input)
+
 	tmpl, err := template.New("config").Delims(params.LeftDelim, params.RightDelim).Funcs(template.FuncMap{
 		"b64encode":   b64Encode,
 		"concat":      concat,
@@ -109,7 +118,7 @@ func tryRenderTemplate(input string, context map[string]interface{}, params Conf
 		"readNthLine": readNthLine,
 		"strJoin":     strJoin,
 		"trim":        trim,
-	}).Parse(input)
+	}).Parse(processed)
 	if err != nil {
 		log.Err(err).Msgf("bad configuration template, %s", input)
 		return input

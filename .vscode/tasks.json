@@ -1,0 +1,10 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "init_debug_env",
+        "type": "shell",
+        "command": "${workspaceFolder}/scripts/cmd_init_debug_env.sh",
+      },
+    ]
+  }

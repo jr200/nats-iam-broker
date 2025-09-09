@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	internal "github.com/jr200/nats-iam-broker/internal"
-	"gopkg.in/yaml.v3"
 
 	"github.com/nats-io/jwt/v2"
 	"github.com/rs/zerolog/log"
@@ -23,9 +22,9 @@ const (
 )
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface for RoleBindingStrategy.
-func (rbs *RoleBindingStrategy) UnmarshalYAML(value *yaml.Node) error {
+func (rbs *RoleBindingStrategy) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var str string
-	if err := value.Decode(&str); err != nil {
+	if err := unmarshal(&str); err != nil {
 		return err
 	}
 
@@ -154,6 +153,16 @@ func evaluateMatchCriterion(match Match, context map[string]interface{}, binding
 				log.Debug().Msgf("match-pass[%s]: %s == %s (Binding Index: %d)", match.Claim, match.Value, val, bindingIndex)
 				break
 			}
+		}
+	case map[string]interface{}:
+		if _, ok := v[match.Value]; ok {
+			isClaimMatched = true
+			log.Debug().Msgf("match-pass[%s]: key '%s' exists in map (Binding Index: %d)", match.Claim, match.Value, bindingIndex)
+		}
+	case map[string]string:
+		if _, ok := v[match.Value]; ok {
+			isClaimMatched = true
+			log.Debug().Msgf("match-pass[%s]: key '%s' exists in map (Binding Index: %d)", match.Claim, match.Value, bindingIndex)
 		}
 	default:
 		log.Trace().Msgf("match-skip[%s]: unsupported type %T (Binding Index: %d)", match.Claim, v, bindingIndex)
