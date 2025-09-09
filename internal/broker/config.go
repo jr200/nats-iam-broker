@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -457,25 +458,39 @@ func improveYAMLErrorMessage(err error) error {
 func mergeConfigurationFiles(files []string) (string, error) {
 	var mergedMap map[string]interface{}
 
-	for _, filePath := range files {
-		log.Debug().Msgf("merging config %s", filePath)
-		raw, err := os.ReadFile(filePath)
-		if err != nil {
-			return "", fmt.Errorf("error reading file content: %v", err)
+	for _, pattern := range files {
+		paths := []string{pattern}
+		if strings.ContainsAny(pattern, "*?[]") {
+			matches, err := filepath.Glob(pattern)
+			if err != nil {
+				return "", fmt.Errorf("invalid glob pattern %q: %v", pattern, err)
+			}
+			if len(matches) == 0 {
+				return "", fmt.Errorf("glob pattern %q did not match any files", pattern)
+			}
+			paths = matches
 		}
 
-		var nextMapToMerge map[string]interface{}
-		if err := yaml.Unmarshal(raw, &nextMapToMerge); err != nil {
-			return "", fmt.Errorf("error in file %s: %v", filePath, improveYAMLErrorMessage(err))
-		}
+		for _, filePath := range paths {
+			log.Debug().Msgf("merging config %s", filePath)
+			raw, err := os.ReadFile(filePath)
+			if err != nil {
+				return "", fmt.Errorf("error reading file content: %v", err)
+			}
 
-		if mergedMap == nil {
-			mergedMap = nextMapToMerge
-			continue
-		}
+			var nextMapToMerge map[string]interface{}
+			if err := yaml.Unmarshal(raw, &nextMapToMerge); err != nil {
+				return "", fmt.Errorf("error in file %s: %v", filePath, improveYAMLErrorMessage(err))
+			}
 
-		// Recursively merge the maps
-		mergedMap = deepMerge(mergedMap, nextMapToMerge)
+			if mergedMap == nil {
+				mergedMap = nextMapToMerge
+				continue
+			}
+
+			// Recursively merge the maps
+			mergedMap = deepMerge(mergedMap, nextMapToMerge)
+		}
 	}
 
 	mergedYAML, err := yaml.Marshal(mergedMap)

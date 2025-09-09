@@ -38,6 +38,23 @@
                 "SERVICE_ACCT_SIGNK": "$SECRET_STORE/Accounts/MINTER/acct-signing-key.nk",
                 "SERVICE_ACCT_XK": "$SECRET_STORE/Accounts/MINTER/acct-encryption-key.xk"
             }
+        },
+        {
+            "name": "Launch: debug local build",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "init_debug_env",
+            "program": "${workspaceFolder}/cmd/nats-iam-broker/main.go",
+            "args": [
+                "-log", "trace",
+                "-log-sensitive",
+                "-log-human",
+                "${workspaceFolder}/docker/config/*.yaml",
+                "/tmp/nats-iam-broker/*.yaml",
+            ],
+            "envFile": "${workspaceFolder}/.env.local",
         }
     ]
 }

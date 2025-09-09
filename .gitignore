@@ -41,3 +41,5 @@ dist/
 *.tgz
 cmd/nats-iam-broker/__debug_bin*
 run/
+
+.env.local
