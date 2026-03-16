@@ -204,7 +204,7 @@ func evaluateMatchCriterion(match Match, context map[string]interface{}, binding
 	return false, ""
 }
 
-func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt.Permissions, *jwt.Limits, Duration) {
+func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt.Permissions, *jwt.Limits, Duration, error) {
 	type matchResult struct {
 		matches          int
 		numMatchCriteria int // Store the number of criteria in the matched binding
@@ -273,8 +273,11 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 					Strs("matched_on", currentMatchedOn).
 					Msg("selected first strictly matching role binding")
 
-				permissions, limits := c.collateRoles(roleBinding.Roles)
-				return roleBinding.Account, permissions, limits, roleBinding.TokenMaxExpiry
+				permissions, limits, err := c.collateRoles(roleBinding.Roles)
+				if err != nil {
+					return "", nil, nil, Duration{}, err
+				}
+				return roleBinding.Account, permissions, limits, roleBinding.TokenMaxExpiry, nil
 			}
 			// If not a full match in strict mode, continue to the next binding
 			continue
@@ -296,7 +299,10 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 			}
 
 			if updateBestMatch {
-				permissions, limits := c.collateRoles(roleBinding.Roles)
+				permissions, limits, err := c.collateRoles(roleBinding.Roles)
+				if err != nil {
+					return "", nil, nil, Duration{}, err
+				}
 				bestMatch = matchResult{
 					matches:          currentMatches,
 					numMatchCriteria: numMatchCriteria, // Store the number of criteria
@@ -321,11 +327,13 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 				Int("binding_index", fallbackIndex).
 				Str("role_binding_account", fallbackBinding.Account).
 				Msg("no strict match found, using fallback role binding")
-			permissions, limits := c.collateRoles(fallbackBinding.Roles)
-			return fallbackBinding.Account, permissions, limits, fallbackBinding.TokenMaxExpiry
+			permissions, limits, err := c.collateRoles(fallbackBinding.Roles)
+			if err != nil {
+				return "", nil, nil, Duration{}, err
+			}
+			return fallbackBinding.Account, permissions, limits, fallbackBinding.TokenMaxExpiry, nil
 		}
-		log.Error().Msgf("no role-binding strictly matched idp token, context=%v", context)
-		return "", nil, nil, Duration{}
+		return "", nil, nil, Duration{}, fmt.Errorf("no role-binding strictly matched idp token")
 	}
 
 	// best_match: Check if any match was found
@@ -335,11 +343,13 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 				Int("binding_index", fallbackIndex).
 				Str("role_binding_account", fallbackBinding.Account).
 				Msg("no best_match found, using fallback role binding")
-			permissions, limits := c.collateRoles(fallbackBinding.Roles)
-			return fallbackBinding.Account, permissions, limits, fallbackBinding.TokenMaxExpiry
+			permissions, limits, err := c.collateRoles(fallbackBinding.Roles)
+			if err != nil {
+				return "", nil, nil, Duration{}, err
+			}
+			return fallbackBinding.Account, permissions, limits, fallbackBinding.TokenMaxExpiry, nil
 		}
-		log.Error().Msgf("no role-binding matched idp token using best_match strategy, context=%v", context)
-		return "", nil, nil, Duration{}
+		return "", nil, nil, Duration{}, fmt.Errorf("no role-binding matched idp token using best_match strategy")
 	}
 
 	log.Debug().
@@ -349,10 +359,10 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 		Strs("matched_on", bestMatch.matchedOn).
 		Msg("selected role binding using best_match strategy")
 
-	return bestMatch.account, bestMatch.permissions, bestMatch.limits, bestMatch.maxExpiry
+	return bestMatch.account, bestMatch.permissions, bestMatch.limits, bestMatch.maxExpiry, nil
 }
 
-func (c *Config) collateRoles(roles []string) (*jwt.Permissions, *jwt.Limits) {
+func (c *Config) collateRoles(roles []string) (*jwt.Permissions, *jwt.Limits, error) {
 	allPermissions := jwt.Permissions{
 		Resp: &jwt.ResponsePermission{
 			Expires: 0,
@@ -374,7 +384,10 @@ func (c *Config) collateRoles(roles []string) (*jwt.Permissions, *jwt.Limits) {
 	}
 
 	for _, roleName := range roles {
-		role := c.lookupRole(roleName)
+		role, err := c.lookupRole(roleName)
+		if err != nil {
+			return nil, nil, err
+		}
 
 		log.Trace().Msgf(
 			"-- assigning role [%s]: permissions=%v, limits=%v",
@@ -393,7 +406,7 @@ func (c *Config) collateRoles(roles []string) (*jwt.Permissions, *jwt.Limits) {
 		string(internal.IgnoreError(json.Marshal(allLimits))),
 	)
 
-	return &allPermissions, &allLimits
+	return &allPermissions, &allLimits, nil
 }
 
 func collateLimits(base *jwt.Limits, other *Limits) {
@@ -421,13 +434,12 @@ func collatePermissions(base *jwt.Permissions, other *Permissions) {
 	}
 }
 
-func (c *Config) lookupRole(roleName string) *Role {
+func (c *Config) lookupRole(roleName string) (*Role, error) {
 	for _, role := range c.Rbac.Roles {
 		if role.Name == roleName {
-			return &role
+			return &role, nil
 		}
 	}
 
-	log.Error().Msgf("unknown role: %s", roleName)
-	return nil
+	return nil, fmt.Errorf("unknown role: %s", roleName)
 }

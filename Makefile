@@ -115,11 +115,11 @@ build:
 	go mod download
 
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) \
-	go build -o build/nats-iam-broker-$(GOOS)-$(GOARCH) -gcflags "all=-N -l" -ldflags '-extldflags "-static"' \
+	go build -o build/nats-iam-broker-$(GOOS)-$(GOARCH) -ldflags '-extldflags "-static"' \
 	cmd/nats-iam-broker/main.go
 
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) \
-	go build -o build/test-client-$(GOOS)-$(GOARCH) -gcflags "all=-N -l" -ldflags '-extldflags "-static"' \
+	go build -o build/test-client-$(GOOS)-$(GOARCH) -ldflags '-extldflags "-static"' \
 	cmd/test-client/main.go
 
 ################################################################################

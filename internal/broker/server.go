@@ -94,7 +94,7 @@ func Start(configFiles []string, serverOpts *Options) error {
 			return nil, nil, nil, fmt.Errorf("no valid JWT token found in request")
 		}
 
-		reqClaims, matchedVerifier, err := runVerification(idpRawJwt, idpVerifiers)
+		reqClaims, matchedVerifier, verifiedIDToken, err := runVerification(idpRawJwt, idpVerifiers)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -102,7 +102,9 @@ func Start(configFiles []string, serverOpts *Options) error {
 		// Only fetch and append user info if enabled for this IDP
 		if matchedVerifier.config.UserInfo.Enabled {
 			if tokenReq.AccessToken != "" {
-				userInfo, err := matchedVerifier.verifier.GetUserInfo(context.Background(), tokenReq.AccessToken)
+				userInfoCtx, userInfoCancel := context.WithTimeout(context.Background(), oidcTimeout)
+				defer userInfoCancel()
+				userInfo, err := matchedVerifier.verifier.GetUserInfo(userInfoCtx, tokenReq.AccessToken, verifiedIDToken)
 				if err != nil {
 					log.Warn().Err(err).Msg("failed to fetch user info")
 				} else {
@@ -134,7 +136,11 @@ func Start(configFiles []string, serverOpts *Options) error {
 			log.Error().Err(err).Msg("error rendering config against idp-jwt")
 			return nil, nil, nil, err
 		}
-		userAccountName, permissions, limits, roleBindingTokenMaxExpiry := cfgForRequest.lookupUserAccount(reqClaims.toMap())
+		userAccountName, permissions, limits, roleBindingTokenMaxExpiry, err := cfgForRequest.lookupUserAccount(reqClaims.toMap())
+		if err != nil {
+			log.Error().Err(err).Msg("error looking up user account")
+			return nil, nil, nil, err
+		}
 		userAccountInfo, err := config.lookupAccountInfo(userAccountName)
 		if err != nil {
 			log.Error().Err(err).Msg("error looking up account-info")

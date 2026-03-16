@@ -258,8 +258,8 @@ func (c *Config) serviceEncryptionXkey() nkeys.KeyPair {
 func (v *Duration) UnmarshalText(text []byte) error {
 	d, err := str2duration.ParseDuration(string(text))
 	if err != nil {
-		// possibly templated
-		log.Debug().Msgf("failed to parse duration from '%s' (%v)", string(text), err)
+		// possibly templated — will be re-parsed after template rendering
+		log.Warn().Msgf("failed to parse duration from '%s' (%v)", string(text), err)
 		return nil
 	}
 	v.Duration = d
@@ -271,8 +271,8 @@ func (v *NKey) UnmarshalText(text []byte) error {
 	text = bytes.TrimSpace(text)
 	nkey, err := nkeys.FromSeed(text)
 	if err != nil {
-		// possibly templated
-		log.Debug().Msgf("skipped parsing nkey: %v (%v)", SecureLogKey(string(text)), err)
+		// possibly templated — will be re-parsed after template rendering
+		log.Warn().Msgf("skipped parsing nkey: %v (%v)", SecureLogKey(string(text)), err)
 		return nil
 	}
 	v.KeyPair = nkey

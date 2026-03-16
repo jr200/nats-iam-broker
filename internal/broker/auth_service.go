@@ -97,8 +97,9 @@ func (a *AuthService) Handle(inRequest micro.Request) {
 
 	rc, err := jwt.DecodeAuthorizationRequestClaims(string(token))
 	if err != nil {
-		log.Err(err)
+		log.Err(err).Msg("failed to decode authorization request claims")
 		_ = inRequest.Error("500", err.Error(), nil)
+		return
 	}
 
 	userNkey := rc.UserNkey

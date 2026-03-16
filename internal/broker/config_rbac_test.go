@@ -304,8 +304,13 @@ func TestLookupUserAccount_Strategies(t *testing.T) {
 				},
 			}
 
-			account, perms, _, _ := cfg.lookupUserAccount(tt.context)
+			account, perms, _, _, err := cfg.lookupUserAccount(tt.context)
 
+			if tt.expectedAccount == "" {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
 			assert.Equal(t, tt.expectedAccount, account)
 
 			// Verify the roles assigned to check if the correct binding was chosen

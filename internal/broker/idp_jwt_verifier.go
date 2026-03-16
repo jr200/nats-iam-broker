@@ -12,7 +12,7 @@ import (
 )
 
 type UserInfoProvider interface {
-	GetUserInfo(ctx context.Context, token string) (map[string]interface{}, error)
+	GetUserInfo(ctx context.Context, accessToken string, idToken *oidc.IDToken) (map[string]interface{}, error)
 }
 
 type IdpAndJwtVerifier struct {
@@ -39,7 +39,7 @@ func NewIdpVerifiers(ctx *Context, config *Config) ([]IdpAndJwtVerifier, error) 
 	return idpVerifiers, nil
 }
 
-func runVerification(jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims, *IdpAndJwtVerifier, error) {
+func runVerification(jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims, *IdpAndJwtVerifier, *oidc.IDToken, error) {
 	for _, item := range items {
 		if item.verifier.ctx.Options.LogSensitive {
 			log.Debug().Msgf("verifying jwt against spec. jwt=[%s], spec=[%v]", jwtToken, item.config.ValidationSpec)
@@ -61,15 +61,10 @@ func runVerification(jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims,
 			continue
 		}
 
-		// Store the idToken for use in fetching user info
-		if idToken != nil {
-			item.verifier.IDToken = idToken
-		}
-
-		return reqClaims, &item, nil
+		return reqClaims, &item, idToken, nil
 	}
 
-	return nil, nil, errors.New("no idp verifier found for jwtToken")
+	return nil, nil, nil, errors.New("no idp verifier found for jwtToken")
 }
 
 type IdpJwtVerifier struct {
@@ -79,14 +74,18 @@ type IdpJwtVerifier struct {
 	issuerURL        string
 	MaxTokenLifetime time.Duration
 	ClockSkew        time.Duration
-	IDToken          *oidc.IDToken
 }
+
+const oidcTimeout = 30 * time.Second
 
 func NewJwtVerifier(ctx *Context, clientID string, issuerURL string) (*IdpJwtVerifier, error) {
 	const maxTokenLifetime = time.Hour * 24
 	const clockSkew = time.Minute * 5
 
-	provider, err := oidc.NewProvider(context.Background(), issuerURL)
+	providerCtx, providerCancel := context.WithTimeout(context.Background(), oidcTimeout)
+	defer providerCancel()
+
+	provider, err := oidc.NewProvider(providerCtx, issuerURL)
 	if err != nil {
 		log.Err(err)
 		return nil, err
@@ -116,7 +115,10 @@ func (v *IdpJwtVerifier) verifyJWT(token string, customMapping map[string]string
 		log.Trace().Msgf("VerifyJWT %s", token)
 	}
 
-	idToken, err := v.Verify(context.Background(), token)
+	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), oidcTimeout)
+	defer verifyCancel()
+
+	idToken, err := v.Verify(verifyCtx, token)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -179,10 +181,7 @@ func (v *IdpJwtVerifier) validateAgainstSpec(claims *IdpJwtClaims, spec IdpJwtVa
 		}
 	}
 
-	if spec.SkipAudienceValidation || spec.Audience == nil || len(spec.Audience) == 0 {
-		// Skip audience validation if explicitly disabled or no audience configured
-		_ = 1
-	} else {
+	if !spec.SkipAudienceValidation && len(spec.Audience) > 0 {
 		err := claims.validateAudience(spec.Audience)
 		if err != nil {
 			log.Error().Err(err).Msgf("failed audience check: %v", spec.Audience)
@@ -200,14 +199,18 @@ func (v *IdpJwtVerifier) validateAgainstSpec(claims *IdpJwtClaims, spec IdpJwtVa
 	return nil
 }
 
-func (v *IdpJwtVerifier) GetUserInfo(ctx context.Context, accessToken string) (map[string]interface{}, error) {
+func (v *IdpJwtVerifier) GetUserInfo(ctx context.Context, accessToken string, idToken *oidc.IDToken) (map[string]interface{}, error) {
 	// Parse and verify the ID token
 	if accessToken == "" {
 		return nil, fmt.Errorf("no access token found in claim sources")
 	}
 
+	if idToken == nil {
+		return nil, fmt.Errorf("id token is required to verify access token")
+	}
+
 	// Verify the access token matches the hash in the ID token
-	if err := v.IDToken.VerifyAccessToken(accessToken); err != nil {
+	if err := idToken.VerifyAccessToken(accessToken); err != nil {
 		return nil, fmt.Errorf("access token verification failed: %w", err)
 	}
 
