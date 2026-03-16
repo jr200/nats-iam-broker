@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/expr-lang/expr"
+	"github.com/expr-lang/expr/vm"
 	internal "github.com/jr200/nats-iam-broker/internal"
 
 	"github.com/nats-io/jwt/v2"
@@ -100,6 +102,25 @@ type Limits struct {
 	NatsLimits jwt.NatsLimits `yaml:",inline"`
 }
 
+// loadOrCompileExpr returns a compiled expr program, using the cache if available.
+func loadOrCompileExpr(expression string, context map[string]interface{}, cache *sync.Map) (*vm.Program, error) {
+	if cache != nil {
+		if cached, ok := cache.Load(expression); ok {
+			return cached.(*vm.Program), nil
+		}
+	}
+
+	program, err := expr.Compile(expression, expr.Env(context), expr.AsBool())
+	if err != nil {
+		return nil, err
+	}
+
+	if cache != nil {
+		cache.Store(expression, program)
+	}
+	return program, nil
+}
+
 func (c *Config) lookupAccountInfo(userAccount string) (*UserAccountInfo, error) {
 	for _, acinfo := range c.Rbac.Accounts {
 		if acinfo.Name == userAccount {
@@ -112,10 +133,11 @@ func (c *Config) lookupAccountInfo(userAccount string) (*UserAccountInfo, error)
 
 // evaluateMatchCriterion checks if a single Match criterion is met by the context.
 // It returns true if matched, along with a string describing the match, otherwise false and an empty string.
-func evaluateMatchCriterion(match Match, context map[string]interface{}, bindingIndex int) (matched bool, description string) {
+// exprCache is an optional cache of compiled expr-lang programs keyed by expression string.
+func evaluateMatchCriterion(match Match, context map[string]interface{}, bindingIndex int, exprCache *sync.Map) (matched bool, description string) {
 	// Handle expression-based matching
 	if match.Expr != "" {
-		program, err := expr.Compile(match.Expr, expr.Env(context), expr.AsBool())
+		program, err := loadOrCompileExpr(match.Expr, context, exprCache)
 		if err != nil {
 			zap.L().Error("match-fail[expr]: compile error", zap.String("expr", match.Expr), zap.Int("binding_index", bindingIndex), zap.Error(err))
 			return false, ""
@@ -240,7 +262,7 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 		// Evaluate all match criteria for this binding
 		bindingFullyMatched := true // Assume full match for strict initially
 		for _, match := range roleBinding.Match {
-			matched, description := evaluateMatchCriterion(match, context, i)
+			matched, description := evaluateMatchCriterion(match, context, i, c.exprCache)
 
 			if matched {
 				currentMatches++

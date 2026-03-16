@@ -1,10 +1,12 @@
 package broker
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/nats-io/jwt/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLookupUserAccount_Strategies(t *testing.T) {
@@ -334,4 +336,143 @@ func TestLookupUserAccount_Strategies(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLoadOrCompileExpr(t *testing.T) {
+	ctx := map[string]interface{}{"sub": "user1", "email": "user1@test.com"}
+
+	t.Run("compiles and returns program without cache", func(t *testing.T) {
+		program, err := loadOrCompileExpr(`sub == "user1"`, ctx, nil)
+		require.NoError(t, err)
+		assert.NotNil(t, program)
+	})
+
+	t.Run("returns error for invalid expression without cache", func(t *testing.T) {
+		_, err := loadOrCompileExpr(`invalid syntax !!!`, ctx, nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("populates cache on first call", func(t *testing.T) {
+		cache := &sync.Map{}
+		expression := `sub == "user1"`
+
+		program, err := loadOrCompileExpr(expression, ctx, cache)
+		require.NoError(t, err)
+		assert.NotNil(t, program)
+
+		// Verify it was stored in cache
+		cached, ok := cache.Load(expression)
+		assert.True(t, ok, "program should be stored in cache")
+		assert.Equal(t, program, cached)
+	})
+
+	t.Run("returns cached program on subsequent calls", func(t *testing.T) {
+		cache := &sync.Map{}
+		expression := `email == "user1@test.com"`
+
+		// First call populates cache
+		program1, err := loadOrCompileExpr(expression, ctx, cache)
+		require.NoError(t, err)
+
+		// Second call should return the same program from cache
+		program2, err := loadOrCompileExpr(expression, ctx, cache)
+		require.NoError(t, err)
+
+		assert.Same(t, program1, program2, "second call should return the same cached program pointer")
+	})
+
+	t.Run("does not cache on error", func(t *testing.T) {
+		cache := &sync.Map{}
+		expression := `invalid syntax !!!`
+
+		_, err := loadOrCompileExpr(expression, ctx, cache)
+		assert.Error(t, err)
+
+		_, ok := cache.Load(expression)
+		assert.False(t, ok, "failed compilations should not be cached")
+	})
+}
+
+func TestExprCache_ConcurrentAccess(t *testing.T) {
+	cache := &sync.Map{}
+	ctx := map[string]interface{}{"sub": "user1", "groups": []interface{}{"admin", "dev"}}
+	expressions := []string{
+		`sub == "user1"`,
+		`"admin" in groups`,
+		`"dev" in groups`,
+		`sub == "user1" && "admin" in groups`,
+	}
+
+	var wg sync.WaitGroup
+	const goroutines = 20
+
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			expression := expressions[idx%len(expressions)]
+			program, err := loadOrCompileExpr(expression, ctx, cache)
+			assert.NoError(t, err)
+			assert.NotNil(t, program)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Verify all expressions were cached
+	for _, expression := range expressions {
+		_, ok := cache.Load(expression)
+		assert.True(t, ok, "expression %q should be in cache", expression)
+	}
+}
+
+func TestLookupUserAccount_WithExprCache(t *testing.T) {
+	roles := []Role{
+		{Name: "role-a", Permissions: Permissions{Pub: jwt.Permission{Allow: []string{"a.>"}}}},
+	}
+
+	t.Run("expr results are cached across calls", func(t *testing.T) {
+		cache := &sync.Map{}
+		cfg := &Config{
+			Rbac: Rbac{
+				RoleBindingMatchingStrategy: StrategyStrict,
+				RoleBinding: []RoleBinding{
+					{Account: "Acc1", Roles: []string{"role-a"}, Match: []Match{{Expr: `sub == "user1"`}}},
+				},
+				Roles: roles,
+			},
+			exprCache: cache,
+		}
+
+		// First call
+		account, _, _, _, err := cfg.lookupUserAccount(map[string]interface{}{"sub": "user1"})
+		require.NoError(t, err)
+		assert.Equal(t, "Acc1", account)
+
+		// Verify expression was cached
+		_, ok := cache.Load(`sub == "user1"`)
+		assert.True(t, ok, "expression should be in cache after first call")
+
+		// Second call should use cache
+		account2, _, _, _, err := cfg.lookupUserAccount(map[string]interface{}{"sub": "user1"})
+		require.NoError(t, err)
+		assert.Equal(t, "Acc1", account2)
+	})
+
+	t.Run("nil exprCache falls back to uncached behavior", func(t *testing.T) {
+		cfg := &Config{
+			Rbac: Rbac{
+				RoleBindingMatchingStrategy: StrategyStrict,
+				RoleBinding: []RoleBinding{
+					{Account: "Acc1", Roles: []string{"role-a"}, Match: []Match{{Expr: `sub == "user1"`}}},
+				},
+				Roles: roles,
+			},
+			exprCache: nil,
+		}
+
+		account, _, _, _, err := cfg.lookupUserAccount(map[string]interface{}{"sub": "user1"})
+		require.NoError(t, err)
+		assert.Equal(t, "Acc1", account)
+	})
 }

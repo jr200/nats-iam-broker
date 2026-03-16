@@ -232,6 +232,128 @@ func TestRenderAllTemplates_CustomDelimiters(t *testing.T) {
 	assert.Equal(t, "hello world", result)
 }
 
+func TestNewTemplateCache(t *testing.T) {
+	params := ConfigParams{LeftDelim: "{{", RightDelim: "}}"}
+
+	t.Run("pre-compiles all template expressions", func(t *testing.T) {
+		content := "url: {{.url}}\nname: {{.name}}\nstatic: plain"
+		tc := newTemplateCache(content, params)
+
+		assert.NotNil(t, tc.regex)
+		assert.Len(t, tc.templates, 2)
+		assert.Contains(t, tc.templates, "{{.url}}")
+		assert.Contains(t, tc.templates, "{{.name}}")
+	})
+
+	t.Run("deduplicates identical templates", func(t *testing.T) {
+		content := "a: {{.val}}\nb: {{.val}}\nc: {{.val}}"
+		tc := newTemplateCache(content, params)
+
+		assert.Len(t, tc.templates, 1)
+		assert.Contains(t, tc.templates, "{{.val}}")
+	})
+
+	t.Run("no templates produces empty cache", func(t *testing.T) {
+		tc := newTemplateCache("plain text with no templates", params)
+
+		assert.NotNil(t, tc.regex)
+		assert.Empty(t, tc.templates)
+	})
+
+	t.Run("invalid template is skipped", func(t *testing.T) {
+		// {{.valid}} will compile, {{func_missing "x"}} will fail because func_missing isn't registered
+		content := `{{.valid}} {{func_missing "x"}}`
+		tc := newTemplateCache(content, params)
+
+		// The valid one should be compiled, the invalid one skipped
+		assert.Contains(t, tc.templates, "{{.valid}}")
+	})
+
+	t.Run("custom delimiters", func(t *testing.T) {
+		customParams := ConfigParams{LeftDelim: "<<", RightDelim: ">>"}
+		content := "hello <<.name>>"
+		tc := newTemplateCache(content, customParams)
+
+		assert.Len(t, tc.templates, 1)
+		assert.Contains(t, tc.templates, "<<.name>>")
+	})
+
+	t.Run("pre-compiles function templates", func(t *testing.T) {
+		content := `value: {{b64encode "hello"}}`
+		tc := newTemplateCache(content, params)
+
+		assert.Len(t, tc.templates, 1)
+	})
+}
+
+func TestTemplateCache_RenderAll(t *testing.T) {
+	params := ConfigParams{LeftDelim: "{{", RightDelim: "}}"}
+
+	t.Run("renders using pre-compiled templates", func(t *testing.T) {
+		content := "hello {{.name}}, email: {{.email}}"
+		tc := newTemplateCache(content, params)
+
+		result := tc.renderAll(content, map[string]interface{}{
+			"name":  "alice",
+			"email": "alice@test.com",
+		})
+		assert.Equal(t, "hello alice, email: alice@test.com", result)
+	})
+
+	t.Run("produces same output as uncached renderAllTemplates", func(t *testing.T) {
+		content := `name: {{.name}}
+url: {{.url}}
+encoded: {{b64encode "test"}}
+plain: no-template`
+
+		mappings := map[string]interface{}{
+			"name": "my-service",
+			"url":  "nats://localhost:4222",
+		}
+
+		tc := newTemplateCache(content, params)
+		cached := tc.renderAll(content, mappings)
+		uncached := renderAllTemplates(content, mappings, params)
+
+		assert.Equal(t, uncached, cached)
+	})
+
+	t.Run("renders with different mappings from same cache", func(t *testing.T) {
+		content := "user: {{.user}}"
+		tc := newTemplateCache(content, params)
+
+		r1 := tc.renderAll(content, map[string]interface{}{"user": "alice"})
+		r2 := tc.renderAll(content, map[string]interface{}{"user": "bob"})
+
+		assert.Equal(t, "user: alice", r1)
+		assert.Equal(t, "user: bob", r2)
+	})
+
+	t.Run("no templates returns content unchanged", func(t *testing.T) {
+		content := "static content"
+		tc := newTemplateCache(content, params)
+
+		result := tc.renderAll(content, map[string]interface{}{})
+		assert.Equal(t, "static content", result)
+	})
+
+	t.Run("missing field renders as no value", func(t *testing.T) {
+		content := "{{.missing_field}}"
+		tc := newTemplateCache(content, params)
+
+		result := tc.renderAll(content, map[string]interface{}{})
+		assert.Equal(t, "<no value>", result)
+	})
+}
+
+func TestTemplateFuncMap(t *testing.T) {
+	fm := templateFuncMap()
+	expectedFuncs := []string{"b64encode", "concat", "expandEnv", "env", "readFile", "readNthLine", "strJoin", "trim"}
+	for _, name := range expectedFuncs {
+		assert.Contains(t, fm, name, "templateFuncMap should contain %s", name)
+	}
+}
+
 func TestTryRenderTemplate(t *testing.T) {
 	params := ConfigParams{LeftDelim: "{{", RightDelim: "}}"}
 

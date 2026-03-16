@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-playground/validator"
@@ -28,7 +30,20 @@ const (
 // configParsePhase tracks which config parsing phase is active.
 // During "initial" phase, template parse failures are expected and logged at Debug.
 // During "render" phase, they indicate a real template rendering failure and are logged at Warn.
-var configParsePhase = configPhaseRender
+// Uses atomic.Value for thread safety since UnmarshalText is called concurrently via GetConfig.
+var configParsePhase atomic.Value
+
+func init() {
+	configParsePhase.Store(configPhaseRender)
+}
+
+func getConfigParsePhase() string {
+	return configParsePhase.Load().(string)
+}
+
+func setConfigParsePhase(phase string) {
+	configParsePhase.Store(phase)
+}
 
 // Struct definitions
 type Config struct {
@@ -37,6 +52,8 @@ type Config struct {
 	Service   Service      `yaml:"service" validate:"required"`
 	Idp       []Idp        `yaml:"idp" validate:"required"`
 	Rbac      Rbac         `yaml:"rbac" validate:"required"`
+
+	exprCache *sync.Map `yaml:"-"` // shared compiled expr-lang expression cache
 }
 
 type ConfigParams struct {
@@ -115,6 +132,11 @@ type TokenRequest struct {
 type ConfigManager struct {
 	mergedYAML string
 	baseConfig Config // stores the initial config with defaults
+
+	// Cached resources to avoid re-creation on every GetConfig call
+	validate      *validator.Validate
+	templateCache *templateCache
+	exprCache     *sync.Map // map[string]*vm.Program — compiled expr-lang expressions
 }
 
 // NewConfigManager creates a new ConfigManager instance
@@ -130,12 +152,12 @@ func NewConfigManager(files []string) (*ConfigManager, error) {
 	// Parse the merged YAML into base config
 	// Template expressions haven't been rendered yet, so parse failures for
 	// templated values (NKey, Duration) are expected and logged at Debug level.
-	configParsePhase = configPhaseInitial
+	setConfigParsePhase(configPhaseInitial)
 	if err := yaml.Unmarshal([]byte(merged), &baseConfig); err != nil {
-		configParsePhase = configPhaseRender
+		setConfigParsePhase(configPhaseRender)
 		return nil, improveYAMLErrorMessage(err)
 	}
-	configParsePhase = configPhaseRender
+	setConfigParsePhase(configPhaseRender)
 
 	if baseConfig.Service.Name == "" {
 		return nil, fmt.Errorf("missing configuration value service.name")
@@ -155,9 +177,21 @@ func NewConfigManager(files []string) (*ConfigManager, error) {
 		baseConfig.NATS.TokenExpiryBounds.Max.Duration = DefaultTokenExpiryBoundsUpper
 	}
 
+	// Pre-compile validator with custom validations
+	v := validator.New()
+	if err := v.RegisterValidation("semver", validateSemVer); err != nil {
+		return nil, fmt.Errorf("error registering semver validation: %v", err)
+	}
+
+	// Pre-compile template regex and templates
+	tc := newTemplateCache(merged, baseConfig.AppParams)
+
 	return &ConfigManager{
-		mergedYAML: merged,
-		baseConfig: baseConfig,
+		mergedYAML:    merged,
+		baseConfig:    baseConfig,
+		validate:      v,
+		templateCache: tc,
+		exprCache:     &sync.Map{},
 	}, nil
 }
 
@@ -166,8 +200,8 @@ func (cm *ConfigManager) GetConfig(mappings map[string]interface{}) (*Config, er
 	// Create a new config instance starting with the base config
 	cfg := cm.baseConfig
 
-	// Render templates with provided mappings
-	renderedYAML := renderAllTemplates(cm.mergedYAML, mappings, cfg.AppParams)
+	// Render templates with provided mappings using pre-compiled templates
+	renderedYAML := cm.templateCache.renderAll(cm.mergedYAML, mappings)
 
 	// Create a temporary config to hold rendered values
 	var tempCfg Config
@@ -227,13 +261,8 @@ func (cm *ConfigManager) GetConfig(mappings map[string]interface{}) (*Config, er
 	cfg.Idp = tempCfg.Idp
 	cfg.Rbac = tempCfg.Rbac
 
-	// Validate the final config
-	validate := validator.New()
-	if err := validate.RegisterValidation("semver", validateSemVer); err != nil {
-		return nil, fmt.Errorf("error registering semver validation: %v", err)
-	}
-
-	if err := validate.Struct(&cfg); err != nil {
+	// Validate the final config using pre-compiled validator
+	if err := cm.validate.Struct(&cfg); err != nil {
 		if validationErrors, ok := err.(validator.ValidationErrors); ok {
 			var errorMessages []string
 			for _, fieldErr := range validationErrors {
@@ -243,6 +272,9 @@ func (cm *ConfigManager) GetConfig(mappings map[string]interface{}) (*Config, er
 		}
 		return nil, err
 	}
+
+	// Attach shared expression cache for role binding evaluation
+	cfg.exprCache = cm.exprCache
 
 	return &cfg, nil
 }
@@ -272,7 +304,7 @@ func (v *Duration) UnmarshalText(text []byte) error {
 	d, err := str2duration.ParseDuration(string(text))
 	if err != nil {
 		s := string(text)
-		if strings.Contains(s, "{{") && configParsePhase == configPhaseInitial {
+		if strings.Contains(s, "{{") && getConfigParsePhase() == configPhaseInitial {
 			zap.L().Debug("skipped parsing duration (unrendered template)",
 				zap.String("value", s))
 		} else {
@@ -291,7 +323,7 @@ func (v *NKey) UnmarshalText(text []byte) error {
 	nkey, err := nkeys.FromSeed(text)
 	if err != nil {
 		s := string(text)
-		if strings.Contains(s, "{{") && configParsePhase == configPhaseInitial {
+		if strings.Contains(s, "{{") && getConfigParsePhase() == configPhaseInitial {
 			zap.L().Debug("skipped parsing nkey (unrendered template)",
 				zap.String("value", SecureLogKey(s)))
 		} else {

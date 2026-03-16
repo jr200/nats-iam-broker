@@ -40,7 +40,30 @@ func Start(configFiles []string, serverOpts *Options) error {
 
 	// Connect to NATS
 	natsOpts := config.natsOptions()
-	natsOpts = append(natsOpts, nats.Name(config.Service.Name))
+	natsOpts = append(natsOpts,
+		nats.Name(config.Service.Name),
+		nats.MaxReconnects(-1),
+		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
+			if err != nil {
+				zap.L().Error("NATS disconnected", zap.Error(err))
+			} else {
+				zap.L().Warn("NATS disconnected (graceful)")
+			}
+		}),
+		nats.ReconnectHandler(func(nc *nats.Conn) {
+			zap.L().Info("NATS reconnected", zap.String("addr", nc.ConnectedAddr()))
+		}),
+		nats.ClosedHandler(func(_ *nats.Conn) {
+			zap.L().Info("NATS connection closed")
+		}),
+		nats.ErrorHandler(func(_ *nats.Conn, sub *nats.Subscription, err error) {
+			if sub != nil {
+				zap.L().Error("NATS async error", zap.String("subject", sub.Subject), zap.Error(err))
+			} else {
+				zap.L().Error("NATS async error", zap.Error(err))
+			}
+		}),
+	)
 
 	natsDrainConnection := func(nc *nats.Conn) {
 		if nc != nil {
