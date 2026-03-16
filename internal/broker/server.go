@@ -12,13 +12,15 @@ import (
 	"go.uber.org/zap"
 )
 
-func Start(configFiles []string, serverOpts *Options) error {
-	ctx := NewServerContext(serverOpts)
-
+func Start(configFiles []string, cliOpts *Options, cliFlags map[string]bool) error {
 	configManager, err := NewConfigManager(configFiles)
 	if err != nil {
 		return fmt.Errorf("failed to initialize config manager: %v", err)
 	}
+
+	// Merge: defaults <- YAML <- explicit CLI flags
+	serverOpts := MergeOptions(configManager.ServerOptions(), cliOpts, cliFlags)
+	ctx := NewServerContext(serverOpts)
 
 	config, err := configManager.GetConfig(make(map[string]interface{}))
 	if err != nil {

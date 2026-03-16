@@ -48,6 +48,7 @@ func setConfigParsePhase(phase string) {
 // Struct definitions
 type Config struct {
 	AppParams ConfigParams `yaml:"params"`
+	Server    Options      `yaml:"server"`
 	NATS      NATS         `yaml:"nats" validate:"required"`
 	Service   Service      `yaml:"service" validate:"required"`
 	Idp       []Idp        `yaml:"idp" validate:"required"`
@@ -139,6 +140,11 @@ type ConfigManager struct {
 	validate      *validator.Validate
 	templateCache *templateCache
 	exprCache     *sync.Map // map[string]*vm.Program — compiled expr-lang expressions
+}
+
+// ServerOptions returns the server options parsed from the YAML configuration.
+func (cm *ConfigManager) ServerOptions() Options {
+	return cm.baseConfig.Server
 }
 
 // NewConfigManager creates a new ConfigManager instance

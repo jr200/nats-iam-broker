@@ -13,23 +13,23 @@ import (
 var serverOpts *broker.Options
 
 func main() {
-	configFiles := parseFlags()
+	configFiles, cliFlags := parseFlags()
 
-	exitCode := run(configFiles)
+	exitCode := run(configFiles, cliFlags)
 	os.Exit(exitCode)
 }
 
-func run(configFiles []string) int {
+func run(configFiles []string, cliFlags map[string]bool) int {
 	defer func() { _ = zap.L().Sync() }()
 
-	if err := broker.Start(configFiles, serverOpts); err != nil {
+	if err := broker.Start(configFiles, serverOpts, cliFlags); err != nil {
 		fmt.Fprintf(os.Stderr, "[service stderr]: %v\n", err)
 		return 1
 	}
 	return 0
 }
 
-func parseFlags() []string {
+func parseFlags() ([]string, map[string]bool) {
 	var logLevel string
 	var logHumanReadable bool
 
@@ -43,6 +43,12 @@ func parseFlags() []string {
 	flag.BoolVar(&serverOpts.WatchConfig, "watch", false, "enable hot-reload of config files via file watching")
 	flag.Parse()
 
+	// Collect which flags were explicitly set on the command line
+	cliFlags := make(map[string]bool)
+	flag.Visit(func(f *flag.Flag) {
+		cliFlags[f.Name] = true
+	})
+
 	configFiles := flag.Args()
 	if len(configFiles) == 0 {
 		w := flag.CommandLine.Output() // may be os.Stderr - but not necessarily
@@ -54,5 +60,5 @@ func parseFlags() []string {
 
 	logging.Setup(logLevel, logHumanReadable)
 
-	return configFiles
+	return configFiles, cliFlags
 }
