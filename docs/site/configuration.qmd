@@ -1,0 +1,73 @@
+---
+title: "Configuration Reference"
+---
+
+Standard go templating is used to construct roles dynamically. Templating functions are listed in the `filters` module.
+
+The configuration structure is outlined below.
+
+## Service Configuration
+
+| Key | Type | Description |
+| --- | ---- | ----------- |
+| `nats.url` | `string` | NATS server URL |
+| `service.name` | `string` | name of deployed micro-service instance |
+| `service.version` | `string` | version of deployed micro-service instance |
+| `service.description` | `string` | description of deployed micro-service instance |
+| `service.creds_file` | `string` | user credentials used to connect to NATS |
+
+## Account Configuration
+
+| Key | Type | Description |
+| --- | ---- | ----------- |
+| `service.account.name` | `string` | (metadata) _human-readable reminder of account used to sign and encrypt communications with NATS server_ |
+| `service.account.signing_nkey` | `string` | key used to sign new user-jwt returned to NATS |
+| `service.account.encryption.enabled` | `bool` | toggle for communication-encryption with NATS server |
+| `service.account.encryption.xkey_secret` | `string` | trusted secret-key for encryption with NATS server |
+
+## IDP Configuration
+
+| Key | Type | Description |
+| --- | ---- | ----------- |
+| `idp.client_id` | `string` | the client identifier registered with the IdP |
+| `idp.issuer_url` | `string` | the url of the IdP issuer |
+| `idp.custom_mapping` | `map[string]string` | maps custom IDP claim names to standardized claim names (e.g. `"https://example.com/claims/roles": "roles"`) |
+| `idp.ignore_setup_error` | `bool` | Optional. If `true`, logs errors during the initial setup/verification of this IDP (e.g., connection errors to `issuer_url`) but allows the broker to start with other valid IDPs. Defaults to `false`. |
+| `idp.user_info.enabled` | `bool` | If `true`, fetches additional claims from the OIDC UserInfo endpoint and merges them into the matching context. Requires the client to provide an `access_token`. |
+
+## IDP Validation
+
+| Key | Type | Description |
+| --- | ---- | ----------- |
+| `idp.validation.claims` | `[]string` | set of required claims on idp token |
+| `idp.validation.aud` | `[]string` | set of allowed values for _audience_ claim |
+| `idp.validation.exp.min` | `duration` | minimum time to expiry for idp token from _now_ |
+| `idp.validation.exp.max` | `duration` | maximum duration of idp token from _now_ |
+
+## RBAC Configuration
+
+| Key | Type | Description |
+| --- | ---- | ----------- |
+| `rbac.user_accounts` | - | set of accounts configured to issue and sign nats user-jwts |
+| `rbac.user_accounts[i].name` | `string` | name of user-jwt signing account |
+| `rbac.user_accounts[i].public_key` | `string` | public key of user-jwt signing account |
+| `rbac.user_accounts[i].signing_nkey` | `string` | signing key of user-jwt signing account in nkey format |
+| `rbac.roles` | - | set of referenceable nats jwt permission groupings |
+| `rbac.roles[i].name` | `string` | role name |
+| `rbac.roles[i].permissions` | [jwt.Permissions](https://github.com/nats-io/jwt/blob/main/v2/types.go) | nats-io/jwt permissions structure (see link) |
+| `rbac.roles[i].limits` | [jwt.Limits](https://github.com/nats-io/jwt/blob/main/v2/types.go) | nats-io/jwt limits structure (see link) |
+
+## Role Binding Configuration
+
+| Key | Type | Description |
+| --- | ---- | ----------- |
+| `rbac.role_binding` | - | Defines how IdP claims/permissions map to user accounts and roles |
+| `rbac.role_binding[i].user_account` | `string` | User account (from `rbac.user_accounts`) to issue the NATS JWT from |
+| `rbac.role_binding[i].roles` | `[]string` | Set of roles (from `rbac.roles`) whose permissions and limits are assigned to the NATS JWT |
+| `rbac.role_binding[i].match` | `[]Match` | List of criteria that must be met in the IdP JWT for this binding to be considered |
+| `rbac.role_binding[i].match[j].claim` | `string` | Name of an IdP JWT claim to match on (e.g., "email", "groups"). Required if `permission` is not set. |
+| `rbac.role_binding[i].match[j].value` | `string` | The value the corresponding IdP JWT claim must have. Required if `claim` is set. |
+| `rbac.role_binding[i].match[j].permission` | `string` | A permission string required in the IdP JWT's `permissions` claim. Required if `claim` is not set. |
+| `rbac.role_binding[i].match[j].expr` | `string` | A boolean expression evaluated against all available claims using [expr-lang/expr](https://github.com/expr-lang/expr). See [Role Binding & Matching](role-binding.qmd). |
+| `rbac.role_binding[i].token_max_expiration` | `duration` | Override token max expiry for this binding. Overrides `rbac.token_max_expiration`. |
+| `rbac.role_binding_matching_strategy` | `string` | Strategy for selecting a role binding when multiple could match. Can be `strict` or `best_match`. Defaults to `best_match`. See [Matching Strategies](role-binding.qmd#sec-matching-strategies). |

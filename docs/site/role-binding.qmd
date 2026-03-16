@@ -1,0 +1,123 @@
+---
+title: "Role Binding & Matching"
+---
+
+Role bindings determine which NATS account, roles, permissions, and limits are assigned to a user based on the claims in their IdP JWT. Each role binding specifies a set of `match` criteria and the resulting `user_account` and `roles`.
+
+## Match Types
+
+There are three types of match criteria. Each `match` entry should use exactly one of these:
+
+### Claim-Based Matching (`claim` + `value`)
+
+Matches a specific claim key against an expected value. Supports:
+
+- **String equality**: the claim value equals the match value
+- **Array membership**: the match value is found in a claim that is an array
+- **Map key existence**: the match value exists as a key in a claim that is a map
+
+```yaml
+role_binding:
+  - user_account: APP1
+    match:
+      - { claim: email, value: "admin@example.com" }
+      - { claim: groups, value: "developers" }
+    roles:
+      - admin-role
+```
+
+### Permission-Based Matching (`permission`)
+
+Checks if a specific string exists in the JWT's `permissions` field (which can be a string or an array of strings):
+
+```yaml
+role_binding:
+  - user_account: APP1
+    match:
+      - { permission: "nats:account:admin" }
+    roles:
+      - admin-role
+```
+
+### Expression-Based Matching (`expr`)
+
+Uses [expr-lang/expr](https://github.com/expr-lang/expr) to evaluate a boolean expression against the full claims context. This is the most flexible match type and supports complex logic:
+
+```yaml
+role_binding:
+  - user_account: APP1
+    match:
+      - expr: 'email endsWith "@example.com" && "admin" in groups'
+    roles:
+      - admin-role
+
+  - user_account: APP2
+    match:
+      - expr: 'preferred_username == "service-bot" || client_id == "NATS_SERVICE_KEY"'
+    roles:
+      - service-role
+```
+
+Common expr-lang operators and functions:
+
+- `==`, `!=`, `>`, `<`, `>=`, `<=` -- comparison
+- `&&`, `||`, `!` -- logical
+- `in` -- membership (e.g., `"admin" in groups`)
+- `contains` -- substring or element check (e.g., `email contains "@example.com"`)
+- `startsWith`, `endsWith` -- string prefix/suffix
+- `matches` -- regex matching (e.g., `email matches ".*@example\\.(com|org)"`)
+
+All claims listed in [JWT Claims](claims.qmd) are accessible by name in expressions.
+
+### Combining Match Types
+
+Match criteria can be combined within a single binding. All match types can be mixed freely:
+
+```yaml
+role_binding:
+  - user_account: APP1
+    match:
+      - { claim: aud, value: "my-app" }
+      - { permission: "nats:write" }
+      - expr: '"engineering" in groups'
+    roles:
+      - full-access
+```
+
+## Matching Strategies {#sec-matching-strategies}
+
+The `role_binding_matching_strategy` setting controls how the broker selects a binding when multiple could match:
+
+### `best_match` (default)
+
+- Evaluates all criteria across all bindings
+- Selects the binding with the **most** matched criteria
+- On a tie, prefers the binding with more total criteria (more specific)
+- On a further tie, the first binding in config order wins
+
+### `strict`
+
+- Requires **all** match criteria in a binding to succeed
+- The **first** fully matching binding is selected
+- Bindings with any failed criterion are skipped entirely
+
+## Fallback Bindings
+
+A role binding with an empty `match` list acts as a fallback. It is used only when no other binding matches:
+
+```yaml
+role_binding:
+  # Specific binding
+  - user_account: ADMIN_ACCOUNT
+    match:
+      - { claim: email, value: "admin@example.com" }
+    roles:
+      - admin-role
+
+  # Fallback for all other authenticated users
+  - user_account: DEFAULT_ACCOUNT
+    roles:
+      - read-only
+```
+
+Only the **first** fallback binding in config order is used if multiple are defined.

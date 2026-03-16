@@ -1,0 +1,32 @@
+---
+title: "nats-iam-broker"
+subtitle: "Decentralised Auth Callout for NATS"
+---
+
+A configurable NATS micro-service that exchanges Identity Provider (IdP) tokens[^1] _for_ NATS user authorization JWTs. This component helps implement the decentralised auth callout flow:
+
+[^1]: <https://www.iana.org/assignments/jwt/jwt.xhtml>
+
+1. A prospective NATS user authenticates with their IdP, and passes the obtained token to NATS.
+2. This micro-service (re-)validates the IdP token.
+3. This micro-service mints a new NATS user access token with specific authorizations.
+
+## What does it do?
+
+The assumption is that implementations of auth callout microservices are _almost_ identical, but for the process of determining which authorizations should be assigned to the minted NATS user access tokens.
+
+This component implements the boilerplate code and using YAML configuration and golang templating, allows construction of JWTs with claims of the form:
+
+```
+claims(natsJwt) = f(claims(idpJwt))
+```
+
+where:
+
+- `natsJwt` is the JWT sent to the NATS server when establishing a new connection.
+- `f` is a function that extracts and transforms claims from the IdP's Jwt.
+- `idpJwt` is the IdP JWT supplied from the user.
+
+## Quick Start
+
+Head to the [Getting Started](getting-started.qmd) guide or explore the [Examples](examples.qmd) to see the broker in action.
