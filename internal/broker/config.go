@@ -94,6 +94,8 @@ type Idp struct {
 	TokenExpiryBounds DurationBounds       `yaml:"token_bounds"`
 	CustomMapping     map[string]string    `yaml:"custom_mapping"`
 	IgnoreSetupError  bool                 `yaml:"ignore_setup_error"`
+	MaxTokenLifetime  Duration             `yaml:"max_token_lifetime"`
+	ClockSkew         Duration             `yaml:"clock_skew"`
 }
 
 type UserInfoConfig struct {

@@ -35,7 +35,7 @@ func Test_calculateExpiration(t *testing.T) {
 			want: time.Now().Add(30 * time.Minute).Unix(),
 		},
 		{
-			name: "IDP expiry below NATS min bound",
+			name: "IDP expiry below NATS min bound, clamped to IDP ceiling",
 			args: args{
 				cfg: &Config{
 					NATS: NATS{
@@ -49,7 +49,8 @@ func Test_calculateExpiration(t *testing.T) {
 				idpValidationExpiry:       nil,
 				roleBindingTokenMaxExpiry: nil,
 			},
-			want: time.Now().Add(30 * time.Minute).Unix(),
+			// NATS min would push to 30m, but IDP ceiling (1m) wins
+			want: time.Now().Add(1 * time.Minute).Unix(),
 		},
 		{
 			name: "IDP expiry above NATS max bound",
@@ -69,7 +70,7 @@ func Test_calculateExpiration(t *testing.T) {
 			want: time.Now().Add(1 * time.Hour).Unix(),
 		},
 		{
-			name: "IDP validation expiry min bound enforced",
+			name: "IDP validation expiry min bound clamped to IDP ceiling",
 			args: args{
 				cfg: &Config{
 					NATS: NATS{
@@ -86,7 +87,29 @@ func Test_calculateExpiration(t *testing.T) {
 				},
 				roleBindingTokenMaxExpiry: nil,
 			},
-			want: time.Now().Add(15 * time.Minute).Unix(),
+			// Validation min wants 15m, but IDP ceiling (5m) wins
+			want: time.Now().Add(5 * time.Minute).Unix(),
+		},
+		{
+			name: "IDP validation expiry min bound enforced within IDP ceiling",
+			args: args{
+				cfg: &Config{
+					NATS: NATS{
+						TokenExpiryBounds: DurationBounds{
+							Min: Duration{Duration: 1 * time.Minute},
+							Max: Duration{Duration: 2 * time.Hour},
+						},
+					},
+				},
+				idpProvidedExpiry: time.Now().Add(1 * time.Hour).Unix(),
+				idpValidationExpiry: &DurationBounds{
+					Min: Duration{Duration: 15 * time.Minute},
+				},
+				roleBindingTokenMaxExpiry: nil,
+			},
+			// IDP starts at 1h, validation min is 15m (no change since 1h > 15m),
+			// IDP ceiling is 1h, so result is 1h
+			want: time.Now().Add(1 * time.Hour).Unix(),
 		},
 		{
 			name: "IDP validation expiry max bound enforced",
@@ -109,7 +132,7 @@ func Test_calculateExpiration(t *testing.T) {
 			want: time.Now().Add(45 * time.Minute).Unix(),
 		},
 		{
-			name: "role binding token max expiry overrides IDP expiry",
+			name: "role binding token max expiry clamped to IDP ceiling",
 			args: args{
 				cfg: &Config{
 					NATS: NATS{
@@ -123,6 +146,25 @@ func Test_calculateExpiration(t *testing.T) {
 				idpValidationExpiry:       nil,
 				roleBindingTokenMaxExpiry: &Duration{Duration: 1 * time.Hour},
 			},
+			// Role binding wants 1h, but IDP ceiling (30m) wins
+			want: time.Now().Add(30 * time.Minute).Unix(),
+		},
+		{
+			name: "role binding token max expiry within IDP ceiling",
+			args: args{
+				cfg: &Config{
+					NATS: NATS{
+						TokenExpiryBounds: DurationBounds{
+							Min: Duration{Duration: 1 * time.Minute},
+							Max: Duration{Duration: 2 * time.Hour},
+						},
+					},
+				},
+				idpProvidedExpiry:         time.Now().Add(2 * time.Hour).Unix(),
+				idpValidationExpiry:       nil,
+				roleBindingTokenMaxExpiry: &Duration{Duration: 1 * time.Hour},
+			},
+			// Role binding wants 1h, IDP ceiling is 2h, so 1h is fine
 			want: time.Now().Add(1 * time.Hour).Unix(),
 		},
 		{
@@ -146,7 +188,7 @@ func Test_calculateExpiration(t *testing.T) {
 			want: time.Now().Add(45 * time.Minute).Unix(),
 		},
 		{
-			name: "all bounds interact correctly",
+			name: "all bounds interact correctly, clamped to IDP ceiling",
 			args: args{
 				cfg: &Config{
 					NATS: NATS{
@@ -166,6 +208,31 @@ func Test_calculateExpiration(t *testing.T) {
 				},
 				roleBindingTokenMaxExpiry: &Duration{Duration: 35 * time.Minute},
 			},
+			// Role binding sets 35m, but IDP ceiling (30m) wins
+			want: time.Now().Add(30 * time.Minute).Unix(),
+		},
+		{
+			name: "all bounds interact correctly within IDP ceiling",
+			args: args{
+				cfg: &Config{
+					NATS: NATS{
+						TokenExpiryBounds: DurationBounds{
+							Min: Duration{Duration: 5 * time.Minute},
+							Max: Duration{Duration: 2 * time.Hour},
+						},
+					},
+					Rbac: Rbac{
+						TokenMaxExpiry: Duration{Duration: 1 * time.Hour},
+					},
+				},
+				idpProvidedExpiry: time.Now().Add(2 * time.Hour).Unix(),
+				idpValidationExpiry: &DurationBounds{
+					Min: Duration{Duration: 15 * time.Minute},
+					Max: Duration{Duration: 45 * time.Minute},
+				},
+				roleBindingTokenMaxExpiry: &Duration{Duration: 35 * time.Minute},
+			},
+			// Role binding sets 35m, IDP ceiling is 2h, so 35m is fine
 			want: time.Now().Add(35 * time.Minute).Unix(),
 		},
 		{

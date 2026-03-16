@@ -53,13 +53,13 @@ func writeTestConfig(t *testing.T, path, serviceName string) {
 	require.NoError(t, err)
 }
 
-func newTestLiveState(t *testing.T, configFile string) *liveState {
+func newTestLiveState(t *testing.T, configFile string) *LiveState {
 	t.Helper()
 	cm, err := NewConfigManager([]string{configFile})
 	require.NoError(t, err)
 	cfg, err := cm.GetConfig(make(map[string]interface{}))
 	require.NoError(t, err)
-	return &liveState{
+	return &LiveState{
 		config:        cfg,
 		configManager: cm,
 		idpVerifiers:  nil, // IDP verifiers require real OIDC endpoints

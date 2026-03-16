@@ -14,9 +14,9 @@ import (
 
 const defaultDebounceDuration = 500 * time.Millisecond
 
-// liveState bundles all configuration-derived state that can be hot-reloaded.
+// LiveState bundles all configuration-derived state that can be hot-reloaded.
 // It is immutable after construction; a new instance is built on each reload.
-type liveState struct {
+type LiveState struct {
 	config        *Config
 	configManager *ConfigManager
 	idpVerifiers  []IdpAndJwtVerifier
@@ -27,7 +27,7 @@ type liveState struct {
 // swaps the live state used by auth request handlers.
 type ConfigWatcher struct {
 	configFiles []string // original file patterns (may contain globs)
-	state       atomic.Pointer[liveState]
+	state       atomic.Pointer[LiveState]
 	ctx         *Context
 	debounce    time.Duration
 	reloadMu    sync.Mutex // serializes reload operations
@@ -36,7 +36,7 @@ type ConfigWatcher struct {
 }
 
 // NewConfigWatcher creates a ConfigWatcher with the given initial state.
-func NewConfigWatcher(ctx *Context, configFiles []string, initial *liveState) *ConfigWatcher {
+func NewConfigWatcher(ctx *Context, configFiles []string, initial *LiveState) *ConfigWatcher {
 	cw := &ConfigWatcher{
 		configFiles: configFiles,
 		ctx:         ctx,
@@ -49,7 +49,7 @@ func NewConfigWatcher(ctx *Context, configFiles []string, initial *liveState) *C
 
 // State returns the current live state. This is the hot-path read used
 // by every auth request and is lock-free.
-func (cw *ConfigWatcher) State() *liveState {
+func (cw *ConfigWatcher) State() *LiveState {
 	return cw.state.Load()
 }
 
@@ -188,7 +188,7 @@ func (cw *ConfigWatcher) reload() error {
 
 	auditSubject := newConfig.Service.Name + ".evt.audit.account.%s.user.%s.created"
 
-	newState := &liveState{
+	newState := &LiveState{
 		config:        newConfig,
 		configManager: newCM,
 		idpVerifiers:  newVerifiers,

@@ -110,7 +110,7 @@ func Start(configFiles []string, serverOpts *Options) error {
 	zap.L().Info("audit events configured", zap.String("subject_pattern", strings.Replace(auditEventSubject, "%s", "*", 2)))
 
 	// Build initial live state and config watcher
-	initial := &liveState{
+	initial := &LiveState{
 		config:        config,
 		configManager: configManager,
 		idpVerifiers:  idpVerifiers,
@@ -171,7 +171,10 @@ func calculateExpiration(cfg *Config, idpProvidedExpiry int64, idpValidationExpi
 	// 1. Start with IDP provided expiry
 	expiry := idpProvidedExpiry
 
-	// TODO: Is it allowed to have a token that is higher than the IDP provided max expiry?
+	// The IDP-provided expiry is the absolute upper bound. Downstream overrides
+	// (role bindings, RBAC) may shorten the token lifetime but never extend it
+	// beyond what the IDP originally granted.
+	idpCeiling := idpProvidedExpiry
 
 	// 2. Apply idpValidation bounds
 	if idpValidationExpiry != nil {
@@ -197,12 +200,19 @@ func calculateExpiration(cfg *Config, idpProvidedExpiry int64, idpValidationExpi
 		}
 	}
 
-	// Make sure that the expiry is within the bounds
+	// 5. Make sure that the expiry is within the NATS token bounds
 	if expiry < now.Add(cfg.NATS.TokenExpiryBounds.Min.Duration).Unix() {
 		expiry = now.Add(cfg.NATS.TokenExpiryBounds.Min.Duration).Unix()
 	}
 	if expiry > now.Add(cfg.NATS.TokenExpiryBounds.Max.Duration).Unix() {
 		expiry = now.Add(cfg.NATS.TokenExpiryBounds.Max.Duration).Unix()
+	}
+
+	// 6. Enforce the IDP-provided expiry as the absolute ceiling. No override
+	// (role binding, RBAC, or NATS bounds) may extend the token beyond the
+	// lifetime the IDP originally granted.
+	if expiry > idpCeiling {
+		expiry = idpCeiling
 	}
 
 	return expiry

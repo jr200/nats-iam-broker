@@ -24,7 +24,7 @@ func NewIdpVerifiers(ctx *Context, config *Config) ([]IdpAndJwtVerifier, error) 
 	idpVerifiers := make([]IdpAndJwtVerifier, 0, len(config.Idp))
 	for i := range config.Idp {
 		idp := &config.Idp[i] // Use a pointer to the IDP config
-		idpVerifier, err := NewJwtVerifier(ctx, idp.ClientID, idp.IssuerURL)
+		idpVerifier, err := NewJwtVerifier(ctx, idp.ClientID, idp.IssuerURL, idp.MaxTokenLifetime.Duration, idp.ClockSkew.Duration)
 		if err != nil {
 			if idp.IgnoreSetupError {
 				zap.L().Warn("Failed to setup IDP verifier, ignoring due to config", zap.Error(err), zap.String("issuer_url", idp.IssuerURL), zap.String("client_id", idp.ClientID))
@@ -78,9 +78,18 @@ type IdpJwtVerifier struct {
 
 const oidcTimeout = 30 * time.Second
 
-func NewJwtVerifier(ctx *Context, clientID string, issuerURL string) (*IdpJwtVerifier, error) {
-	const maxTokenLifetime = time.Hour * 24
-	const clockSkew = time.Minute * 5
+const (
+	DefaultMaxTokenLifetime = 24 * time.Hour
+	DefaultClockSkew        = 5 * time.Minute
+)
+
+func NewJwtVerifier(ctx *Context, clientID string, issuerURL string, maxTokenLifetime time.Duration, clockSkew time.Duration) (*IdpJwtVerifier, error) {
+	if maxTokenLifetime <= 0 {
+		maxTokenLifetime = DefaultMaxTokenLifetime
+	}
+	if clockSkew <= 0 {
+		clockSkew = DefaultClockSkew
+	}
 
 	providerCtx, providerCancel := context.WithTimeout(context.Background(), oidcTimeout)
 	defer providerCancel()
@@ -92,15 +101,15 @@ func NewJwtVerifier(ctx *Context, clientID string, issuerURL string) (*IdpJwtVer
 	}
 
 	if ctx.Options.LogSensitive {
-		zap.L().Debug("NewJwtVerifier config-params", zap.String("client_id", clientID), zap.String("issuer_url", issuerURL))
+		zap.L().Debug("NewJwtVerifier config-params", zap.String("client_id", clientID), zap.String("issuer_url", issuerURL),
+			zap.Duration("max_token_lifetime", maxTokenLifetime), zap.Duration("clock_skew", clockSkew))
 	}
 
 	return &IdpJwtVerifier{
-		ctx:             ctx,
-		IDTokenVerifier: provider.Verifier(&oidc.Config{ClientID: clientID}),
-		provider:        provider,
-		issuerURL:       issuerURL,
-		// TODO: take MaxTokenLifetime from config
+		ctx:              ctx,
+		IDTokenVerifier:  provider.Verifier(&oidc.Config{ClientID: clientID}),
+		provider:         provider,
+		issuerURL:        issuerURL,
 		MaxTokenLifetime: maxTokenLifetime,
 		ClockSkew:        clockSkew,
 	}, nil
