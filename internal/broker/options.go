@@ -1,4 +1,4 @@
-package server
+package broker
 
 // Options holds all configuration options for the server
 type Options struct {

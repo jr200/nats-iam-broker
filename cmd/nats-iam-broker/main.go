@@ -5,17 +5,17 @@ import (
 	"fmt"
 	"os"
 
-	server "github.com/jr200/nats-iam-broker/internal/broker"
+	"github.com/jr200/nats-iam-broker/internal/broker"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
-var serverOpts *server.Options
+var serverOpts *broker.Options
 
 func main() {
 	configFiles := parseFlags()
 
-	if err := server.Start(configFiles, serverOpts); err != nil {
+	if err := broker.Start(configFiles, serverOpts); err != nil {
 		fmt.Fprintf(os.Stderr, "[service stderr]: %v\n", err)
 		os.Exit(1)
 	}
@@ -28,7 +28,7 @@ func parseFlags() []string {
 	flag.StringVar(&logLevel, "log", "info", "set log-level: disabled, panic, fatal, error, warn, info, debug, trace")
 	flag.BoolVar(&logHumanReadable, "log-human", false, "use human-readable logging output")
 
-	serverOpts = server.DefaultServerOptions()
+	serverOpts = broker.DefaultServerOptions()
 	flag.BoolVar(&serverOpts.LogSensitive, "log-sensitive", false, "enable sensitive logging (for debugging)")
 	flag.Parse()
 
