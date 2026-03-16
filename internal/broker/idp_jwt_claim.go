@@ -55,8 +55,8 @@ type IdpJwtClaims struct {
 	ZoneInfo          string                 `json:"zoneinfo,omitempty"`
 	Locale            string                 `json:"locale,omitempty"`
 	ClientID          string                 `json:"client_id,omitempty"`
-	Groups            string                 `json:"groups,omitempty"`
-	Roles             string                 `json:"roles,omitempty"`
+	Groups            interface{}            `json:"groups,omitempty"`
+	Roles             interface{}            `json:"roles,omitempty"`
 	Email             string                 `json:"email,omitempty"`
 	EmailVerified     bool                   `json:"email_verified,omitempty"`
 	Picture           string                 `json:"picture,omitempty"`
@@ -223,6 +223,12 @@ func (j *IdpJwtClaims) fromMap(m map[string]interface{}, customMapping map[strin
 				j.IssuedAt = toInt64(value)
 			case "NotBeforeTime":
 				j.NotBeforeTime = toInt64(value)
+			case "Groups", "Roles":
+				// Preserve original type (string or array) for expression matching
+				field := reflect.ValueOf(j).Elem().FieldByName(structField)
+				if field.IsValid() && field.CanSet() {
+					field.Set(reflect.ValueOf(value))
+				}
 			default:
 				// Use reflection to set the field value
 				field := reflect.ValueOf(j).Elem().FieldByName(structField)

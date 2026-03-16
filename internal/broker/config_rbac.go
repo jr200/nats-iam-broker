@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/expr-lang/expr"
 	internal "github.com/jr200/nats-iam-broker/internal"
 
 	"github.com/nats-io/jwt/v2"
@@ -69,9 +70,12 @@ type RoleBinding struct {
 }
 
 type Match struct {
+	// Legacy fields (backward compatible)
 	Claim      string `yaml:"claim,omitempty"`
 	Value      string `yaml:"value,omitempty"`
 	Permission string `yaml:"permission,omitempty"`
+	// Expression-based matching using expr-lang/expr
+	Expr string `yaml:"expr,omitempty"`
 }
 
 type Role struct {
@@ -109,6 +113,29 @@ func (c *Config) lookupAccountInfo(userAccount string) (*UserAccountInfo, error)
 // evaluateMatchCriterion checks if a single Match criterion is met by the context.
 // It returns true if matched, along with a string describing the match, otherwise false and an empty string.
 func evaluateMatchCriterion(match Match, context map[string]interface{}, bindingIndex int) (matched bool, description string) {
+	// Handle expression-based matching
+	if match.Expr != "" {
+		program, err := expr.Compile(match.Expr, expr.Env(context), expr.AsBool())
+		if err != nil {
+			log.Error().Err(err).Msgf("match-fail[expr]: compile error for '%s' (Binding Index: %d)", match.Expr, bindingIndex)
+			return false, ""
+		}
+
+		result, err := expr.Run(program, context)
+		if err != nil {
+			log.Debug().Err(err).Msgf("match-fail[expr]: eval error for '%s' (Binding Index: %d)", match.Expr, bindingIndex)
+			return false, ""
+		}
+
+		if boolResult, ok := result.(bool); ok && boolResult {
+			log.Debug().Msgf("match-pass[expr]: %s (Binding Index: %d)", match.Expr, bindingIndex)
+			return true, fmt.Sprintf("expr=%s", match.Expr)
+		}
+
+		log.Debug().Msgf("match-fail[expr]: %s (Binding Index: %d)", match.Expr, bindingIndex)
+		return false, ""
+	}
+
 	// Handle permission-based matching
 	if match.Permission != "" {
 		isPermissionMatched := false
@@ -190,6 +217,8 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 	}
 
 	var bestMatch matchResult
+	var fallbackBinding *RoleBinding
+	var fallbackIndex int
 
 	strategy := c.Rbac.RoleBindingMatchingStrategy
 	log.Debug().Str("strategy", string(strategy)).Msg("Using role binding matching strategy")
@@ -200,7 +229,11 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 		numMatchCriteria := len(roleBinding.Match)
 
 		if numMatchCriteria == 0 {
-			log.Trace().Msgf("Skipping role binding index %d: no match criteria", i)
+			if fallbackBinding == nil {
+				fallbackBinding = &c.Rbac.RoleBinding[i]
+				fallbackIndex = i
+				log.Debug().Msgf("recorded fallback role binding at index %d (account: %s)", i, roleBinding.Account)
+			}
 			continue
 		}
 
@@ -283,12 +316,28 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 
 	if strategy == StrategyStrict {
 		// If we finished the loop in strict mode, no binding fully matched
+		if fallbackBinding != nil {
+			log.Debug().
+				Int("binding_index", fallbackIndex).
+				Str("role_binding_account", fallbackBinding.Account).
+				Msg("no strict match found, using fallback role binding")
+			permissions, limits := c.collateRoles(fallbackBinding.Roles)
+			return fallbackBinding.Account, permissions, limits, fallbackBinding.TokenMaxExpiry
+		}
 		log.Error().Msgf("no role-binding strictly matched idp token, context=%v", context)
 		return "", nil, nil, Duration{}
 	}
 
 	// best_match: Check if any match was found
 	if bestMatch.matches == 0 {
+		if fallbackBinding != nil {
+			log.Debug().
+				Int("binding_index", fallbackIndex).
+				Str("role_binding_account", fallbackBinding.Account).
+				Msg("no best_match found, using fallback role binding")
+			permissions, limits := c.collateRoles(fallbackBinding.Roles)
+			return fallbackBinding.Account, permissions, limits, fallbackBinding.TokenMaxExpiry
+		}
 		log.Error().Msgf("no role-binding matched idp token using best_match strategy, context=%v", context)
 		return "", nil, nil, Duration{}
 	}

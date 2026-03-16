@@ -162,6 +162,129 @@ func TestLookupUserAccount_Strategies(t *testing.T) {
 			expectedAccount: "AccWithMatch",
 			expectedRoles:   []string{"role-b"},
 		},
+
+		// --- Expr-based Matching Tests ---
+		{
+			name:     "Expr: Simple equality",
+			strategy: StrategyStrict,
+			bindings: []RoleBinding{
+				{Account: "AccExpr", Roles: []string{"role-a"}, Match: []Match{{Expr: `sub == "user1"`}}},
+			},
+			context:         map[string]interface{}{"sub": "user1"},
+			expectedAccount: "AccExpr",
+			expectedRoles:   []string{"role-a"},
+		},
+		{
+			name:     "Expr: Array membership with 'in'",
+			strategy: StrategyStrict,
+			bindings: []RoleBinding{
+				{Account: "AccExpr", Roles: []string{"role-b"}, Match: []Match{{Expr: `"superuser" in groups`}}},
+			},
+			context:         map[string]interface{}{"groups": []interface{}{"superuser", "admin"}},
+			expectedAccount: "AccExpr",
+			expectedRoles:   []string{"role-b"},
+		},
+		{
+			name:     "Expr: Array membership miss",
+			strategy: StrategyStrict,
+			bindings: []RoleBinding{
+				{Account: "AccExpr", Roles: []string{"role-b"}, Match: []Match{{Expr: `"superuser" in groups`}}},
+			},
+			context:         map[string]interface{}{"groups": []interface{}{"viewer"}},
+			expectedAccount: "",
+			expectedRoles:   nil,
+		},
+		{
+			name:     "Expr: Combined with legacy match",
+			strategy: StrategyStrict,
+			bindings: []RoleBinding{
+				{Account: "AccMixed", Roles: []string{"role-c"}, Match: []Match{
+					{Expr: `"admin" in groups`},
+					{Claim: "sub", Value: "user1"},
+				}},
+			},
+			context:         map[string]interface{}{"sub": "user1", "groups": []interface{}{"admin", "dev"}},
+			expectedAccount: "AccMixed",
+			expectedRoles:   []string{"role-c"},
+		},
+		{
+			name:     "Expr: Logical operators",
+			strategy: StrategyBestMatch,
+			bindings: []RoleBinding{
+				{Account: "AccLogic", Roles: []string{"role-a"}, Match: []Match{
+					{Expr: `sub == "user1" && email == "user1@example.com"`},
+				}},
+			},
+			context:         map[string]interface{}{"sub": "user1", "email": "user1@example.com"},
+			expectedAccount: "AccLogic",
+			expectedRoles:   []string{"role-a"},
+		},
+		{
+			name:     "Expr: Compile error returns no match",
+			strategy: StrategyStrict,
+			bindings: []RoleBinding{
+				{Account: "AccBad", Roles: []string{"role-a"}, Match: []Match{{Expr: `invalid syntax !!!`}}},
+			},
+			context:         map[string]interface{}{"sub": "user1"},
+			expectedAccount: "",
+			expectedRoles:   nil,
+		},
+
+		// --- Fallback Binding Tests ---
+		{
+			name:     "BestMatch: Fallback used when no match",
+			strategy: StrategyBestMatch,
+			bindings: []RoleBinding{
+				{Account: "AccSpecific", Roles: []string{"role-a"}, Match: []Match{{Claim: "sub", Value: "user1"}}},
+				{Account: "AccFallback", Roles: []string{"role-b"}, Match: []Match{}}, // Fallback
+			},
+			context:         map[string]interface{}{"sub": "user99"}, // No match
+			expectedAccount: "AccFallback",
+			expectedRoles:   []string{"role-b"},
+		},
+		{
+			name:     "Strict: Fallback used when no strict match",
+			strategy: StrategyStrict,
+			bindings: []RoleBinding{
+				{Account: "AccStrict", Roles: []string{"role-a"}, Match: []Match{{Claim: "sub", Value: "user1"}, {Claim: "aud", Value: "app1"}}},
+				{Account: "AccFallback", Roles: []string{"role-c"}, Match: []Match{}}, // Fallback
+			},
+			context:         map[string]interface{}{"sub": "user1", "aud": "app2"}, // Partial match, strict fails
+			expectedAccount: "AccFallback",
+			expectedRoles:   []string{"role-c"},
+		},
+		{
+			name:     "BestMatch: Fallback not used when match exists",
+			strategy: StrategyBestMatch,
+			bindings: []RoleBinding{
+				{Account: "AccFallback", Roles: []string{"role-c"}, Match: []Match{}},                                // Fallback, ignored
+				{Account: "AccMatch", Roles: []string{"role-a"}, Match: []Match{{Claim: "sub", Value: "user1"}}},     // Wins
+			},
+			context:         map[string]interface{}{"sub": "user1"},
+			expectedAccount: "AccMatch",
+			expectedRoles:   []string{"role-a"},
+		},
+		{
+			name:     "BestMatch: First fallback wins when multiple fallbacks",
+			strategy: StrategyBestMatch,
+			bindings: []RoleBinding{
+				{Account: "AccFallback1", Roles: []string{"role-a"}, Match: []Match{}}, // First fallback
+				{Account: "AccFallback2", Roles: []string{"role-b"}, Match: []Match{}}, // Second fallback, ignored
+			},
+			context:         map[string]interface{}{"sub": "nobody"},
+			expectedAccount: "AccFallback1",
+			expectedRoles:   []string{"role-a"},
+		},
+		{
+			name:     "BestMatch: No match and no fallback",
+			strategy: StrategyBestMatch,
+			bindings: []RoleBinding{
+				{Account: "Acc1", Roles: []string{"role-a"}, Match: []Match{{Claim: "sub", Value: "user1"}}},
+			},
+			context:         map[string]interface{}{"sub": "nobody"},
+			expectedAccount: "",
+			expectedRoles:   nil,
+		},
 	}
 
 	for _, tt := range tests {
