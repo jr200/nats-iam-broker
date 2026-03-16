@@ -29,6 +29,18 @@ nats-iam-broker --watch config.yaml
 - **Kubernetes-friendly** — watches parent directories to handle ConfigMap symlink rotations.
 - **Thread-safe** — in-flight auth requests complete with the previous config; new requests use the updated config.
 
+## Multi-File Configuration Merging {#sec-multi-file-merging}
+
+When multiple configuration files are provided, they are merged in order using the following rules:
+
+- **Maps** are merged recursively — keys from both files are preserved, and overlapping map values are merged depth-first.
+- **Arrays are concatenated, not replaced** — if both files define an array for the same key (e.g., `role_binding`, `roles`, `idp`), the arrays are joined with the base file's entries first, followed by the overlay file's entries.
+- **Primitives** (strings, numbers, booleans) are overridden by the later file.
+
+::: {.callout-important}
+Because arrays are concatenated, splitting array-typed fields (like `idp` or `rbac.role_binding`) across multiple config files will produce a combined list — not a replacement. If you need to fully replace an array, define it in a single file.
+:::
+
 ## Service Configuration
 
 | Key | Type | Description |

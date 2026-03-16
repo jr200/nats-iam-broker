@@ -53,7 +53,7 @@ website:
         - references.qmd
 
   page-footer:
-    center: "nats-iam-broker - MIT License"
+    center: "nats-iam-broker __VERSION__ - MIT License"
 
 format:
   html:
