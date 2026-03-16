@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	DefaultTokenExpiryBoundsMin = 1 * time.Minute
-	DefaultTokenExpiryBoundsMax = 1 * time.Hour
+	DefaultTokenExpiryBoundsLower = 1 * time.Minute
+	DefaultTokenExpiryBoundsUpper = 1 * time.Hour
 )
 
 // Struct definitions
@@ -136,10 +136,10 @@ func NewConfigManager(files []string) (*ConfigManager, error) {
 	}
 
 	if baseConfig.NATS.TokenExpiryBounds.Min.Duration == 0 {
-		baseConfig.NATS.TokenExpiryBounds.Min.Duration = DefaultTokenExpiryBoundsMin
+		baseConfig.NATS.TokenExpiryBounds.Min.Duration = DefaultTokenExpiryBoundsLower
 	}
 	if baseConfig.NATS.TokenExpiryBounds.Max.Duration == 0 {
-		baseConfig.NATS.TokenExpiryBounds.Max.Duration = DefaultTokenExpiryBoundsMax
+		baseConfig.NATS.TokenExpiryBounds.Max.Duration = DefaultTokenExpiryBoundsUpper
 	}
 
 	return &ConfigManager{
@@ -167,10 +167,10 @@ func (cm *ConfigManager) GetConfig(mappings map[string]interface{}) (*Config, er
 	cfg.NATS.URL = tempCfg.NATS.URL
 	cfg.NATS.TokenExpiryBounds = tempCfg.NATS.TokenExpiryBounds
 	if cfg.NATS.TokenExpiryBounds.Max.Duration == 0 {
-		cfg.NATS.TokenExpiryBounds.Max.Duration = DefaultTokenExpiryBoundsMax
+		cfg.NATS.TokenExpiryBounds.Max.Duration = DefaultTokenExpiryBoundsUpper
 	}
 	if cfg.NATS.TokenExpiryBounds.Min.Duration == 0 {
-		cfg.NATS.TokenExpiryBounds.Min.Duration = DefaultTokenExpiryBoundsMin
+		cfg.NATS.TokenExpiryBounds.Min.Duration = DefaultTokenExpiryBoundsLower
 	}
 
 	cfg.Service.Name = tempCfg.Service.Name

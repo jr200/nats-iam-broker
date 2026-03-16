@@ -257,8 +257,8 @@ func TestLookupUserAccount_Strategies(t *testing.T) {
 			name:     "BestMatch: Fallback not used when match exists",
 			strategy: StrategyBestMatch,
 			bindings: []RoleBinding{
-				{Account: "AccFallback", Roles: []string{"role-c"}, Match: []Match{}},                                // Fallback, ignored
-				{Account: "AccMatch", Roles: []string{"role-a"}, Match: []Match{{Claim: "sub", Value: "user1"}}},     // Wins
+				{Account: "AccFallback", Roles: []string{"role-c"}, Match: []Match{}},                            // Fallback, ignored
+				{Account: "AccMatch", Roles: []string{"role-a"}, Match: []Match{{Claim: "sub", Value: "user1"}}}, // Wins
 			},
 			context:         map[string]interface{}{"sub": "user1"},
 			expectedAccount: "AccMatch",

@@ -108,7 +108,7 @@ rbac:
 		cfg, err := cm.GetConfig(map[string]interface{}{})
 		require.NoError(t, err)
 
-		assert.Equal(t, DefaultTokenExpiryBoundsMin, cfg.NATS.TokenExpiryBounds.Min.Duration)
-		assert.Equal(t, DefaultTokenExpiryBoundsMax, cfg.NATS.TokenExpiryBounds.Max.Duration)
+		assert.Equal(t, DefaultTokenExpiryBoundsLower, cfg.NATS.TokenExpiryBounds.Min.Duration)
+		assert.Equal(t, DefaultTokenExpiryBoundsUpper, cfg.NATS.TokenExpiryBounds.Max.Duration)
 	})
 }
