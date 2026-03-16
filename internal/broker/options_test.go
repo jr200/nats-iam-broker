@@ -74,10 +74,10 @@ func TestMergeOptions(t *testing.T) {
 			"metrics-port": true,
 		}
 		merged := MergeOptions(yamlOpts, cliOpts, cliFlags)
-		assert.True(t, merged.LogSensitive)   // from YAML
-		assert.False(t, merged.MetricsEnabled) // CLI override
+		assert.True(t, merged.LogSensitive)       // from YAML
+		assert.False(t, merged.MetricsEnabled)    // CLI override
 		assert.Equal(t, 3000, merged.MetricsPort) // CLI override
-		assert.True(t, merged.WatchConfig)     // from YAML
+		assert.True(t, merged.WatchConfig)        // from YAML
 	})
 
 	t.Run("yaml metrics port zero uses default", func(t *testing.T) {

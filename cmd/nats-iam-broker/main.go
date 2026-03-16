@@ -13,6 +13,10 @@ import (
 var serverOpts *broker.Options
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "decrypt" {
+		os.Exit(runDecrypt(os.Args[2:]))
+	}
+
 	configFiles, cliFlags := parseFlags()
 
 	exitCode := run(configFiles, cliFlags)
