@@ -26,6 +26,14 @@ logging:
   json: false # Set to true to enable JSON logging
   level: info # Set logging level: error, warn, info, debug, trace
 
+metrics:
+  enabled: false # Set to true to enable Prometheus metrics endpoint
+  port: 8080 # Port for the metrics HTTP server
+  serviceMonitor:
+    enabled: false # Set to true to create a Prometheus ServiceMonitor resource
+    interval: 30s # Scrape interval
+    labels: {} # Additional labels for the ServiceMonitor
+
 config:
   # role-based access control configuration section
   rbac:

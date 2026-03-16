@@ -45,7 +45,29 @@ spec:
 {{- if not .Values.logging.json }}
             - -log-human
 {{- end }}
+{{- if .Values.metrics.enabled }}
+            - -metrics
+            - -metrics-port={{ .Values.metrics.port }}
+{{- end }}
           {{- end }}
+{{- if .Values.metrics.enabled }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+{{- end }}
           envFrom:
             {{- toYaml .Values.envFrom | nindent 12 }}
           env:

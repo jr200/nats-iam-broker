@@ -456,6 +456,55 @@ Notice that:
 - `https://mycompany.com/claims/access_level` and `https://mycompany.com/claims/custom_field` retain their original names because they weren't explicitly mapped
 - The mapped claims (`department`, `employee_id`, `roles`, `groups`) use their standardized names
 
+## Prometheus Metrics
+
+The broker can expose Prometheus metrics via an HTTP endpoint. Enable with the `-metrics` flag:
+
+```bash
+nats-iam-broker -metrics -metrics-port 8080 config.yaml
+```
+
+| Flag             | Default | Description                           |
+| ---------------- | ------- | ------------------------------------- |
+| `-metrics`       | `false` | Enable the Prometheus metrics endpoint |
+| `-metrics-port`  | `8080`  | Port for the metrics HTTP server       |
+
+### Endpoints
+
+| Path       | Description                        |
+| ---------- | ---------------------------------- |
+| `/metrics` | Prometheus metrics scrape endpoint |
+| `/healthz` | Health check (returns `200 OK`)    |
+
+### Available Metrics
+
+| Metric                                        | Type      | Labels              | Description                                          |
+| --------------------------------------------- | --------- | ------------------- | ---------------------------------------------------- |
+| `nats_iam_broker_auth_requests_total`         | Counter   | `status`            | Total auth callout requests (`success`, `error`, `denied`) |
+| `nats_iam_broker_auth_request_duration_seconds` | Histogram | `status`          | Auth request processing duration                      |
+| `nats_iam_broker_auth_requests_in_flight`     | Gauge     | -                   | Requests currently being processed                    |
+| `nats_iam_broker_tokens_minted_total`         | Counter   | `account`, `idp`    | NATS user JWTs minted, by account and IDP             |
+| `nats_iam_broker_idp_verify_total`            | Counter   | `idp`, `status`     | IDP JWT verification attempts                         |
+| `nats_iam_broker_idp_verify_duration_seconds` | Histogram | `idp`               | IDP JWT verification duration                         |
+| `nats_iam_broker_request_errors_total`       | Counter   | `stage`             | Request processing errors (`decrypt`, `decode`)       |
+| `nats_iam_broker_response_errors_total`      | Counter   | `stage`             | Response processing errors (`sign`, `encrypt`)        |
+
+### Helm Chart
+
+When deploying with the Helm chart, metrics can be enabled in `values.yaml`:
+
+```yaml
+metrics:
+  enabled: true
+  port: 8080
+  serviceMonitor:
+    enabled: true      # requires Prometheus Operator
+    interval: 30s
+    labels: {}         # additional labels for the ServiceMonitor
+```
+
+This creates a `ClusterIP` Service for the metrics port and optionally a `ServiceMonitor` resource for automatic Prometheus scraping.
+
 # References
 
 1. youtube, synadia auth-callout: https://www.youtube.com/watch?v=VvGxrT-jv64

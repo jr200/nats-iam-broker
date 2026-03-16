@@ -1,9 +1,17 @@
 package broker
 
+const DefaultMetricsPort = 8080
+
 // Options holds all configuration options for the server
 type Options struct {
 	// LogSensitive enables logging of sensitive information (for debugging)
 	LogSensitive bool
+
+	// MetricsEnabled enables the Prometheus metrics endpoint
+	MetricsEnabled bool
+
+	// MetricsPort is the port for the metrics HTTP server
+	MetricsPort int
 }
 
 // Context holds both server options and other server state
@@ -24,6 +32,8 @@ func NewServerContext(opts *Options) *Context {
 // DefaultServerOptions returns a server.Options instance with default values
 func DefaultServerOptions() *Options {
 	return &Options{
-		LogSensitive: false,
+		LogSensitive:   false,
+		MetricsEnabled: false,
+		MetricsPort:    DefaultMetricsPort,
 	}
 }

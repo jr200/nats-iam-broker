@@ -13,19 +13,22 @@ import (
 	"github.com/goccy/go-yaml"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
-	"go.uber.org/zap"
 	"github.com/xhit/go-str2duration/v2"
+	"go.uber.org/zap"
 )
 
 const (
 	DefaultTokenExpiryBoundsLower = 1 * time.Minute
 	DefaultTokenExpiryBoundsUpper = 1 * time.Hour
+
+	configPhaseInitial = "initial"
+	configPhaseRender  = "render"
 )
 
 // configParsePhase tracks which config parsing phase is active.
 // During "initial" phase, template parse failures are expected and logged at Debug.
 // During "render" phase, they indicate a real template rendering failure and are logged at Warn.
-var configParsePhase = "render"
+var configParsePhase = configPhaseRender
 
 // Struct definitions
 type Config struct {
@@ -127,12 +130,12 @@ func NewConfigManager(files []string) (*ConfigManager, error) {
 	// Parse the merged YAML into base config
 	// Template expressions haven't been rendered yet, so parse failures for
 	// templated values (NKey, Duration) are expected and logged at Debug level.
-	configParsePhase = "initial"
+	configParsePhase = configPhaseInitial
 	if err := yaml.Unmarshal([]byte(merged), &baseConfig); err != nil {
-		configParsePhase = "render"
+		configParsePhase = configPhaseRender
 		return nil, improveYAMLErrorMessage(err)
 	}
-	configParsePhase = "render"
+	configParsePhase = configPhaseRender
 
 	if baseConfig.Service.Name == "" {
 		return nil, fmt.Errorf("missing configuration value service.name")
@@ -269,7 +272,7 @@ func (v *Duration) UnmarshalText(text []byte) error {
 	d, err := str2duration.ParseDuration(string(text))
 	if err != nil {
 		s := string(text)
-		if strings.Contains(s, "{{") && configParsePhase == "initial" {
+		if strings.Contains(s, "{{") && configParsePhase == configPhaseInitial {
 			zap.L().Debug("skipped parsing duration (unrendered template)",
 				zap.String("value", s))
 		} else {
@@ -288,7 +291,7 @@ func (v *NKey) UnmarshalText(text []byte) error {
 	nkey, err := nkeys.FromSeed(text)
 	if err != nil {
 		s := string(text)
-		if strings.Contains(s, "{{") && configParsePhase == "initial" {
+		if strings.Contains(s, "{{") && configParsePhase == configPhaseInitial {
 			zap.L().Debug("skipped parsing nkey (unrendered template)",
 				zap.String("value", SecureLogKey(s)))
 		} else {

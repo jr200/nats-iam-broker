@@ -14,12 +14,19 @@ var serverOpts *broker.Options
 
 func main() {
 	configFiles := parseFlags()
+
+	exitCode := run(configFiles)
+	os.Exit(exitCode)
+}
+
+func run(configFiles []string) int {
 	defer func() { _ = zap.L().Sync() }()
 
 	if err := broker.Start(configFiles, serverOpts); err != nil {
 		fmt.Fprintf(os.Stderr, "[service stderr]: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 func parseFlags() []string {
@@ -31,6 +38,8 @@ func parseFlags() []string {
 
 	serverOpts = broker.DefaultServerOptions()
 	flag.BoolVar(&serverOpts.LogSensitive, "log-sensitive", false, "enable sensitive logging (for debugging)")
+	flag.BoolVar(&serverOpts.MetricsEnabled, "metrics", false, "enable Prometheus metrics endpoint")
+	flag.IntVar(&serverOpts.MetricsPort, "metrics-port", broker.DefaultMetricsPort, "port for the metrics HTTP server")
 	flag.Parse()
 
 	configFiles := flag.Args()

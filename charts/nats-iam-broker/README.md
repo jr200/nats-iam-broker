@@ -71,5 +71,10 @@ The following table lists the configurable parameters of the `nats-iam-broker` c
 | `nodeSelector`                                            | Node selector for pod scheduling                                                          | `{}`                              |
 | `tolerations`                                             | Tolerations for pod scheduling                                                            | `[]`                              |
 | `affinity`                                                | Affinity rules for pod scheduling                                                         | `{}`                              |
+| `metrics.enabled`                                         | Enable Prometheus metrics endpoint                                                        | `false`                           |
+| `metrics.port`                                            | Port for the metrics HTTP server                                                          | `8080`                            |
+| `metrics.serviceMonitor.enabled`                          | Create a Prometheus ServiceMonitor resource                                               | `false`                           |
+| `metrics.serviceMonitor.interval`                         | Prometheus scrape interval                                                                | `30s`                             |
+| `metrics.serviceMonitor.labels`                           | Additional labels for the ServiceMonitor                                                  | `{}`                              |
 
 For a complete list of configuration options, see the `values.yaml` file.

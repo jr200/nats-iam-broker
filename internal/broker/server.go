@@ -1,17 +1,14 @@
 package broker
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	internal "github.com/jr200/nats-iam-broker/internal"
-	"github.com/nats-io/jwt/v2"
+	"github.com/jr200/nats-iam-broker/internal/metrics"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/micro"
-	"github.com/nats-io/nkeys"
 	"go.uber.org/zap"
 )
 
@@ -31,6 +28,15 @@ func Start(configFiles []string, serverOpts *Options) error {
 	}
 
 	zap.ReplaceGlobals(zap.L().Named(config.Service.Name))
+
+	// Start metrics server if enabled
+	var m *metrics.Metrics
+	if serverOpts.MetricsEnabled {
+		m = metrics.New()
+		metricsServer := metrics.NewServer(serverOpts.MetricsPort)
+		metricsServer.Start()
+		defer metricsServer.Stop()
+	}
 
 	// Connect to NATS
 	natsOpts := config.natsOptions()
@@ -62,152 +68,8 @@ func Start(configFiles []string, serverOpts *Options) error {
 	//nolint:mnd // 2 is the number of %s placeholders in auditEventSubject
 	zap.L().Info("audit events configured", zap.String("subject_pattern", strings.Replace(auditEventSubject, "%s", "*", 2)))
 
-	auth := NewAuthService(ctx, config.Service.Account.SigningNKey.KeyPair, config.serviceEncryptionXkey(), func(request *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error) {
-		var tokenReq TokenRequest
-		var idpRawJwt string
-
-		if ctx.Options.LogSensitive {
-			zap.L().Debug("NewAuthService request", zap.Any("request", request))
-		}
-
-		if request.ConnectOptions.Token != "" {
-			// Try to parse as JSON token response first
-			if err := json.Unmarshal([]byte(request.ConnectOptions.Token), &tokenReq); err == nil {
-				idpRawJwt = tokenReq.IDToken
-			} else {
-				// If not JSON, treat as raw JWT
-				idpRawJwt = request.ConnectOptions.Token
-			}
-		} else {
-			// Try password field if token is empty
-			if err := json.Unmarshal([]byte(request.ConnectOptions.Password), &tokenReq); err == nil {
-				idpRawJwt = tokenReq.IDToken
-			} else {
-				idpRawJwt = request.ConnectOptions.Password
-			}
-		}
-
-		if idpRawJwt == "" {
-			return nil, nil, nil, fmt.Errorf("no valid JWT token found in request")
-		}
-
-		reqClaims, matchedVerifier, verifiedIDToken, err := runVerification(idpRawJwt, idpVerifiers)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-
-		// Only fetch and append user info if enabled for this IDP
-		if matchedVerifier.config.UserInfo.Enabled {
-			if tokenReq.AccessToken != "" {
-				userInfoCtx, userInfoCancel := context.WithTimeout(context.Background(), oidcTimeout)
-				defer userInfoCancel()
-				userInfo, err := matchedVerifier.verifier.GetUserInfo(userInfoCtx, tokenReq.AccessToken, verifiedIDToken)
-				if err != nil {
-					zap.L().Warn("failed to fetch user info", zap.Error(err))
-				} else {
-					// Merge user info into claims
-					claims := reqClaims.toMap()
-					for k, v := range userInfo {
-						claims[k] = v
-					}
-					reqClaims.fromMap(claims, matchedVerifier.config.CustomMapping)
-				}
-			} else {
-				zap.L().Debug("skipping user info fetch - no access token available")
-			}
-		}
-
-		// Merge in client information from the request
-		reqJwtClaims := reqClaims.toMap()
-		reqJwtClaims["client_id"] = request.ClientInformation.User        // Sentinel ID
-		reqJwtClaims["also_known_as"] = request.ClientInformation.NameTag // Sentinel name
-		reqClaims.fromMap(reqJwtClaims, matchedVerifier.config.CustomMapping)
-
-		if ctx.Options.LogSensitive {
-			zap.L().Debug("reqClaims", zap.Any("claims", reqClaims.toMap()))
-		}
-
-		// Lets render the config with a different mapping:
-		cfgForRequest, err := configManager.GetConfig(reqClaims.toMap())
-		if err != nil {
-			zap.L().Error("error rendering config against idp-jwt", zap.Error(err))
-			return nil, nil, nil, err
-		}
-		userAccountName, permissions, limits, roleBindingTokenMaxExpiry, err := cfgForRequest.lookupUserAccount(reqClaims.toMap())
-		if err != nil {
-			zap.L().Error("error looking up user account", zap.Error(err))
-			return nil, nil, nil, err
-		}
-		userAccountInfo, err := config.lookupAccountInfo(userAccountName)
-		if err != nil {
-			zap.L().Error("error looking up account-info", zap.Error(err))
-			return nil, nil, nil, err
-		}
-
-		if ctx.Options.LogSensitive {
-			zap.L().Debug("userAccountInfo", zap.Any("info", userAccountInfo))
-		}
-
-		// setup claims for user's nats-jwt
-		claims := jwt.NewUserClaims(request.UserNkey)
-		claims.Audience = userAccountName
-		claims.Name = request.ConnectOptions.Username
-		claims.IssuerAccount = userAccountInfo.PublicKey
-
-		claims.Expires = calculateExpiration(
-			cfgForRequest,    // NatsJwt ExpiryBounds and RBAC TokenMaxExpiry
-			reqClaims.Expiry, // IDP Max Expiry
-			&matchedVerifier.config.ValidationSpec.TokenExpiryBounds, // IDP ValidationSpec
-			&roleBindingTokenMaxExpiry,                               // RoleBinding TokenMaxExpiry
-		)
-		claims.Permissions = *permissions
-		claims.Limits = *limits
-		claims.Tags.Add(fmt.Sprintf("email: %s, name: %s, idp: %s, expires: %s",
-			reqClaims.Email,
-			reqClaims.Name,
-			matchedVerifier.config.Description,
-			time.Unix(claims.Expires, 0).Format(time.RFC3339)))
-
-		// Determine the type of signing key used
-		signingKeyInfo, err := determineSigningKeyType(claims, userAccountInfo.SigningNKey.KeyPair, userAccountInfo)
-		if err != nil {
-			zap.L().Warn("failed to determine signing key type for audit event", zap.Error(err))
-		}
-
-		// Publish user creation event with detailed information
-		userEvent := map[string]interface{}{
-			"account":          userAccountName,
-			"account_pub_nkey": userAccountInfo.PublicKey,
-			"user_pub_nkey":    request.UserNkey,
-			"username":         request.ConnectOptions.Username,
-			"email":            reqClaims.Email,
-			"name":             reqClaims.Name,
-			"idp":              matchedVerifier.config.Description,
-			"created_at":       time.Now().Format(time.RFC3339),
-			"expires_at":       time.Unix(claims.Expires, 0).Format(time.RFC3339),
-			"permissions":      permissions,
-			"limits":           limits,
-			"signing_account":  config.Service.Account.Name,
-		}
-
-		// Add signing key information if available
-		if signingKeyInfo != nil {
-			userEvent["signing_key_type"] = signingKeyInfo.Type
-			userEvent["signing_key_pub_nkey"] = signingKeyInfo.PublicKey
-		}
-
-		eventJSON, err := json.Marshal(userEvent)
-		if err != nil {
-			zap.L().Warn("failed to marshal user creation event", zap.Error(err))
-		} else {
-			err = nc.Publish(fmt.Sprintf(auditEventSubject, userAccountName, request.UserNkey), eventJSON)
-			if err != nil {
-				zap.L().Warn("failed to publish user creation event", zap.Error(err))
-			}
-		}
-
-		return claims, userAccountInfo.SigningNKey.KeyPair, userAccountInfo, nil
-	})
+	authCallback := newAuthCallback(ctx, m, nc, config, configManager, idpVerifiers, auditEventSubject)
+	auth := NewAuthService(ctx, config.Service.Account.SigningNKey.KeyPair, config.serviceEncryptionXkey(), authCallback, m)
 
 	zap.L().Info("starting service", zap.String("version", config.Service.Version))
 

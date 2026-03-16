@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jr200/nats-iam-broker/internal/metrics"
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nats.go/micro"
 	"github.com/nats-io/nkeys"
@@ -21,16 +22,18 @@ type AuthService struct {
 	serviceAccountKey nkeys.KeyPair
 	encryptionKey     nkeys.KeyPair
 	createNewClaimsFn AuthHandler
+	metrics           *metrics.Metrics
 }
 
 type AuthHandler func(req *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error)
 
-func NewAuthService(ctx *Context, issuer nkeys.KeyPair, xkey nkeys.KeyPair, handler AuthHandler) *AuthService {
+func NewAuthService(ctx *Context, issuer nkeys.KeyPair, xkey nkeys.KeyPair, handler AuthHandler, m *metrics.Metrics) *AuthService {
 	return &AuthService{
 		ctx:               ctx,
 		serviceAccountKey: issuer,
 		encryptionKey:     xkey,
 		createNewClaimsFn: handler,
+		metrics:           m,
 	}
 }
 
@@ -81,6 +84,9 @@ func (a *AuthService) Handle(inRequest micro.Request) {
 	xkey := inRequest.Headers().Get("Nats-Server-Xkey")
 	if len(xkey) > 0 {
 		if a.encryptionKey == nil {
+			if a.metrics != nil {
+				a.metrics.RequestErrors.WithLabelValues(metrics.StageDecrypt).Inc()
+			}
 			_ = inRequest.Error("500", "xkey not supported", nil)
 			return
 		}
@@ -88,6 +94,9 @@ func (a *AuthService) Handle(inRequest micro.Request) {
 		// Decrypt the message.
 		token, err = a.encryptionKey.Open(inRequest.Data(), xkey)
 		if err != nil {
+			if a.metrics != nil {
+				a.metrics.RequestErrors.WithLabelValues(metrics.StageDecrypt).Inc()
+			}
 			_ = inRequest.Error("500", fmt.Sprintf("error decrypting message: %s", err.Error()), nil)
 			return
 		}
@@ -97,6 +106,9 @@ func (a *AuthService) Handle(inRequest micro.Request) {
 
 	rc, err := jwt.DecodeAuthorizationRequestClaims(string(token))
 	if err != nil {
+		if a.metrics != nil {
+			a.metrics.RequestErrors.WithLabelValues(metrics.StageDecode).Inc()
+		}
 		zap.L().Error("failed to decode authorization request claims", zap.Error(err))
 		_ = inRequest.Error("500", err.Error(), nil)
 		return
@@ -114,6 +126,9 @@ func (a *AuthService) Handle(inRequest micro.Request) {
 	}
 
 	signedToken, err := ValidateAndSign(claims, sk, accountInfo)
+	if err != nil && a.metrics != nil {
+		a.metrics.ResponseErrors.WithLabelValues(metrics.StageSign).Inc()
+	}
 	a.Respond(inRequest, userNkey, serverID, signedToken, err)
 }
 
@@ -129,6 +144,9 @@ func (a *AuthService) Respond(req micro.Request, userNKey, serverID, userJwt str
 	token, err := rc.Encode(a.serviceAccountKey)
 	if err != nil {
 		zap.L().Error("couldn't sign response", zap.Error(err))
+		if a.metrics != nil {
+			a.metrics.ResponseErrors.WithLabelValues(metrics.StageSign).Inc()
+		}
 	}
 
 	if a.ctx.Options.LogSensitive {
@@ -144,6 +162,9 @@ func (a *AuthService) Respond(req micro.Request, userNKey, serverID, userJwt str
 		data, err = a.encryptionKey.Seal(data, xkey)
 		if err != nil {
 			zap.L().Error("couldn't xkey-encrypt payload", zap.Error(err))
+			if a.metrics != nil {
+				a.metrics.ResponseErrors.WithLabelValues(metrics.StageEncrypt).Inc()
+			}
 			_ = req.Respond(nil)
 			return
 		}
