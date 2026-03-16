@@ -51,7 +51,7 @@ func runVerification(jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims,
 				log.Debug().Msgf("error verifying idp-jwt, %s. Token expired at %v", item.config.Description, expiredErr.Expiry)
 				continue
 			}
-			log.Trace().Msgf("error verifying idp-jwt, %s. Trying next idp...", item.config.Description)
+			log.Trace().Err(err).Msgf("error verifying idp-jwt, %s. Trying next idp...", item.config.Description)
 			continue
 		}
 
