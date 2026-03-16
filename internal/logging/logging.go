@@ -23,7 +23,7 @@ func Setup(level string, humanReadable bool) {
 	}
 	cfg.Level = zap.NewAtomicLevelAt(zapLevel)
 
-	logger, err := cfg.Build()
+	logger, err := cfg.Build(zap.AddStacktrace(zapcore.ErrorLevel))
 	if err != nil {
 		// Fallback to nop logger if config fails
 		logger = zap.NewNop()

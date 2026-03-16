@@ -22,6 +22,11 @@ const (
 	DefaultTokenExpiryBoundsUpper = 1 * time.Hour
 )
 
+// configParsePhase tracks which config parsing phase is active.
+// During "initial" phase, template parse failures are expected and logged at Debug.
+// During "render" phase, they indicate a real template rendering failure and are logged at Warn.
+var configParsePhase = "render"
+
 // Struct definitions
 type Config struct {
 	AppParams ConfigParams `yaml:"params"`
@@ -120,9 +125,14 @@ func NewConfigManager(files []string) (*ConfigManager, error) {
 	baseConfig := Config{}
 
 	// Parse the merged YAML into base config
+	// Template expressions haven't been rendered yet, so parse failures for
+	// templated values (NKey, Duration) are expected and logged at Debug level.
+	configParsePhase = "initial"
 	if err := yaml.Unmarshal([]byte(merged), &baseConfig); err != nil {
+		configParsePhase = "render"
 		return nil, improveYAMLErrorMessage(err)
 	}
+	configParsePhase = "render"
 
 	if baseConfig.Service.Name == "" {
 		return nil, fmt.Errorf("missing configuration value service.name")
@@ -258,8 +268,14 @@ func (c *Config) serviceEncryptionXkey() nkeys.KeyPair {
 func (v *Duration) UnmarshalText(text []byte) error {
 	d, err := str2duration.ParseDuration(string(text))
 	if err != nil {
-		// possibly templated — will be re-parsed after template rendering
-		zap.L().Warn(fmt.Sprintf("failed to parse duration from '%s' (%v)", string(text), err))
+		s := string(text)
+		if strings.Contains(s, "{{") && configParsePhase == "initial" {
+			zap.L().Debug("skipped parsing duration (unrendered template)",
+				zap.String("value", s))
+		} else {
+			zap.L().Warn("failed to parse duration",
+				zap.String("value", s), zap.Error(err))
+		}
 		return nil
 	}
 	v.Duration = d
@@ -271,8 +287,14 @@ func (v *NKey) UnmarshalText(text []byte) error {
 	text = bytes.TrimSpace(text)
 	nkey, err := nkeys.FromSeed(text)
 	if err != nil {
-		// possibly templated — will be re-parsed after template rendering
-		zap.L().Warn(fmt.Sprintf("skipped parsing nkey: %v (%v)", SecureLogKey(string(text)), err))
+		s := string(text)
+		if strings.Contains(s, "{{") && configParsePhase == "initial" {
+			zap.L().Debug("skipped parsing nkey (unrendered template)",
+				zap.String("value", SecureLogKey(s)))
+		} else {
+			zap.L().Warn("failed to parse nkey",
+				zap.String("value", SecureLogKey(s)), zap.Error(err))
+		}
 		return nil
 	}
 	v.KeyPair = nkey

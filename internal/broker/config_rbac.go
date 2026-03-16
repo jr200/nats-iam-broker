@@ -37,11 +37,11 @@ func (rbs *RoleBindingStrategy) UnmarshalYAML(unmarshal func(interface{}) error)
 	default:
 		// Default to best_match if the value is empty or unrecognized
 		if strLower == "" {
-			zap.L().Warn(fmt.Sprintf("role_binding_matching_strategy is empty, defaulting to '%s'", StrategyBestMatch))
+			zap.L().Warn("role_binding_matching_strategy is empty, using default", zap.String("default", string(StrategyBestMatch)))
 			*rbs = StrategyBestMatch
 			return nil
 		}
-		zap.L().Warn(fmt.Sprintf("unrecognized role_binding_matching_strategy '%s', defaulting to '%s'", str, StrategyBestMatch))
+		zap.L().Warn("unrecognized role_binding_matching_strategy, using default", zap.String("value", str), zap.String("default", string(StrategyBestMatch)))
 		*rbs = StrategyBestMatch
 		return nil // Or return an error if you want to reject invalid values: fmt.Errorf("invalid role binding strategy: %s", str)
 	}
@@ -117,22 +117,22 @@ func evaluateMatchCriterion(match Match, context map[string]interface{}, binding
 	if match.Expr != "" {
 		program, err := expr.Compile(match.Expr, expr.Env(context), expr.AsBool())
 		if err != nil {
-			zap.L().Error(fmt.Sprintf("match-fail[expr]: compile error for '%s' (Binding Index: %d)", match.Expr, bindingIndex), zap.Error(err))
+			zap.L().Error("match-fail[expr]: compile error", zap.String("expr", match.Expr), zap.Int("binding_index", bindingIndex), zap.Error(err))
 			return false, ""
 		}
 
 		result, err := expr.Run(program, context)
 		if err != nil {
-			zap.L().Debug(fmt.Sprintf("match-fail[expr]: eval error for '%s' (Binding Index: %d)", match.Expr, bindingIndex), zap.Error(err))
+			zap.L().Debug("match-fail[expr]: eval error", zap.String("expr", match.Expr), zap.Int("binding_index", bindingIndex), zap.Error(err))
 			return false, ""
 		}
 
 		if boolResult, ok := result.(bool); ok && boolResult {
-			zap.L().Debug(fmt.Sprintf("match-pass[expr]: %s (Binding Index: %d)", match.Expr, bindingIndex))
+			zap.L().Debug("match-pass[expr]", zap.String("expr", match.Expr), zap.Int("binding_index", bindingIndex))
 			return true, fmt.Sprintf("expr=%s", match.Expr)
 		}
 
-		zap.L().Debug(fmt.Sprintf("match-fail[expr]: %s (Binding Index: %d)", match.Expr, bindingIndex))
+		zap.L().Debug("match-fail[expr]", zap.String("expr", match.Expr), zap.Int("binding_index", bindingIndex))
 		return false, ""
 	}
 
@@ -151,18 +151,18 @@ func evaluateMatchCriterion(match Match, context map[string]interface{}, binding
 		}
 
 		if isPermissionMatched {
-			zap.L().Debug(fmt.Sprintf("match-pass[permission]: %s (Binding Index: %d)", match.Permission, bindingIndex))
+			zap.L().Debug("match-pass[permission]", zap.String("permission", match.Permission), zap.Int("binding_index", bindingIndex))
 			return true, fmt.Sprintf("permission=%s", match.Permission)
 		}
 
-		zap.L().Debug(fmt.Sprintf("match-fail[permission]: %s (Binding Index: %d)", match.Permission, bindingIndex))
+		zap.L().Debug("match-fail[permission]", zap.String("permission", match.Permission), zap.Int("binding_index", bindingIndex))
 		return false, ""
 	}
 
 	// Handle regular claim-based matching
 	contextValue, exists := context[match.Claim]
 	if !exists {
-		zap.L().Debug(fmt.Sprintf("match-skip[%s]: claim key not found in context (Binding Index: %d)", match.Claim, bindingIndex))
+		zap.L().Debug("match-skip: claim key not found in context", zap.String("claim", match.Claim), zap.Int("binding_index", bindingIndex))
 		return false, "" // Claim doesn't exist, so it's not a match for this criterion
 	}
 
@@ -171,28 +171,28 @@ func evaluateMatchCriterion(match Match, context map[string]interface{}, binding
 	case string:
 		if v == match.Value {
 			isClaimMatched = true
-			zap.L().Debug(fmt.Sprintf("match-pass[%s]: %s == %s (Binding Index: %d)", match.Claim, match.Value, v, bindingIndex))
+			zap.L().Debug("match-pass[claim]", zap.String("claim", match.Claim), zap.String("expected", match.Value), zap.String("actual", v), zap.Int("binding_index", bindingIndex))
 		}
 	case []interface{}:
 		for _, val := range v {
 			if sv, ok := val.(string); ok && sv == match.Value {
 				isClaimMatched = true
-				zap.L().Debug(fmt.Sprintf("match-pass[%s]: %s == %s (Binding Index: %d)", match.Claim, match.Value, val, bindingIndex))
+				zap.L().Debug("match-pass[claim]", zap.String("claim", match.Claim), zap.String("expected", match.Value), zap.Any("actual", val), zap.Int("binding_index", bindingIndex))
 				break
 			}
 		}
 	case map[string]interface{}:
 		if _, ok := v[match.Value]; ok {
 			isClaimMatched = true
-			zap.L().Debug(fmt.Sprintf("match-pass[%s]: key '%s' exists in map (Binding Index: %d)", match.Claim, match.Value, bindingIndex))
+			zap.L().Debug("match-pass[claim]: key exists in map", zap.String("claim", match.Claim), zap.String("key", match.Value), zap.Int("binding_index", bindingIndex))
 		}
 	case map[string]string:
 		if _, ok := v[match.Value]; ok {
 			isClaimMatched = true
-			zap.L().Debug(fmt.Sprintf("match-pass[%s]: key '%s' exists in map (Binding Index: %d)", match.Claim, match.Value, bindingIndex))
+			zap.L().Debug("match-pass[claim]: key exists in map", zap.String("claim", match.Claim), zap.String("key", match.Value), zap.Int("binding_index", bindingIndex))
 		}
 	default:
-		zap.L().Debug(fmt.Sprintf("match-skip[%s]: unsupported type %T (Binding Index: %d)", match.Claim, v, bindingIndex))
+		zap.L().Debug("match-skip: unsupported type", zap.String("claim", match.Claim), zap.String("type", fmt.Sprintf("%T", v)), zap.Int("binding_index", bindingIndex))
 		// Unsupported type cannot match the string value
 	}
 
@@ -200,7 +200,7 @@ func evaluateMatchCriterion(match Match, context map[string]interface{}, binding
 		return true, fmt.Sprintf("%s=%s", match.Claim, match.Value)
 	}
 
-	zap.L().Debug(fmt.Sprintf("match-fail[%s]: value '%s' not found in context value '%v' (Binding Index: %d)", match.Claim, match.Value, contextValue, bindingIndex))
+	zap.L().Debug("match-fail[claim]: value not found in context", zap.String("claim", match.Claim), zap.String("expected", match.Value), zap.Any("context_value", contextValue), zap.Int("binding_index", bindingIndex))
 	return false, ""
 }
 
@@ -232,7 +232,7 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 			if fallbackBinding == nil {
 				fallbackBinding = &c.Rbac.RoleBinding[i]
 				fallbackIndex = i
-				zap.L().Debug(fmt.Sprintf("recorded fallback role binding at index %d (account: %s)", i, roleBinding.Account))
+				zap.L().Debug("recorded fallback role binding", zap.Int("binding_index", i), zap.String("account", roleBinding.Account))
 			}
 			continue
 		}
@@ -312,7 +312,7 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 					roleBindingName:  fmt.Sprintf("%s (Index: %d)", roleBinding.Account, i), // More descriptive name
 					matchedOn:        currentMatchedOn,
 				}
-				zap.L().Debug(fmt.Sprintf("new best match found (Index: %d, Matches: %d, Criteria: %d)", i, currentMatches, numMatchCriteria))
+				zap.L().Debug("new best match found", zap.Int("binding_index", i), zap.Int("matches", currentMatches), zap.Int("criteria", numMatchCriteria))
 			}
 		}
 	}
@@ -385,22 +385,20 @@ func (c *Config) collateRoles(roles []string) (*jwt.Permissions, *jwt.Limits, er
 			return nil, nil, err
 		}
 
-		zap.L().Debug(fmt.Sprintf(
-			"-- assigning role [%s]: permissions=%v, limits=%v",
-			roleName,
-			string(internal.IgnoreError(json.Marshal(role.Permissions))),
-			string(internal.IgnoreError(json.Marshal(role.Limits))),
-		))
+		zap.L().Debug("assigning role",
+			zap.String("role", roleName),
+			zap.String("permissions", string(internal.IgnoreError(json.Marshal(role.Permissions)))),
+			zap.String("limits", string(internal.IgnoreError(json.Marshal(role.Limits)))),
+		)
 
 		collatePermissions(&allPermissions, &role.Permissions)
 		collateLimits(&allLimits, &role.Limits)
 	}
 
-	zap.L().Debug(fmt.Sprintf(
-		"-- collatedRoles: permissions=%v, limits=%v",
-		string(internal.IgnoreError(json.Marshal(allPermissions))),
-		string(internal.IgnoreError(json.Marshal(allLimits))),
-	))
+	zap.L().Debug("collated roles",
+		zap.String("permissions", string(internal.IgnoreError(json.Marshal(allPermissions)))),
+		zap.String("limits", string(internal.IgnoreError(json.Marshal(allLimits)))),
+	)
 
 	return &allPermissions, &allLimits, nil
 }

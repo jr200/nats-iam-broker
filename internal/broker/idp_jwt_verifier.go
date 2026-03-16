@@ -42,16 +42,16 @@ func NewIdpVerifiers(ctx *Context, config *Config) ([]IdpAndJwtVerifier, error) 
 func runVerification(jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims, *IdpAndJwtVerifier, *oidc.IDToken, error) {
 	for _, item := range items {
 		if item.verifier.ctx.Options.LogSensitive {
-			zap.L().Debug(fmt.Sprintf("verifying jwt against spec. jwt=[%s], spec=[%v]", jwtToken, item.config.ValidationSpec))
+			zap.L().Debug("verifying jwt against spec", zap.String("jwt", jwtToken), zap.Any("spec", item.config.ValidationSpec))
 		}
 		reqClaims, idToken, err := item.verifier.verifyJWT(jwtToken, item.config.CustomMapping)
 		if err != nil {
 			var expiredErr *oidc.TokenExpiredError
 			if errors.As(err, &expiredErr) {
-				zap.L().Debug(fmt.Sprintf("error verifying idp-jwt, %s. Token expired at %v", item.config.Description, expiredErr.Expiry))
+				zap.L().Debug("error verifying idp-jwt: token expired", zap.String("idp", item.config.Description), zap.Time("expiry", expiredErr.Expiry))
 				continue
 			}
-			zap.L().Debug(fmt.Sprintf("error verifying idp-jwt, %s. Trying next idp...", item.config.Description), zap.Error(err))
+			zap.L().Debug("error verifying idp-jwt, trying next idp", zap.String("idp", item.config.Description), zap.Error(err))
 			continue
 		}
 
@@ -92,7 +92,7 @@ func NewJwtVerifier(ctx *Context, clientID string, issuerURL string) (*IdpJwtVer
 	}
 
 	if ctx.Options.LogSensitive {
-		zap.L().Debug(fmt.Sprintf("NewJwtVerifier (config-params) clientId=%s, issuerUrl=%s", clientID, issuerURL))
+		zap.L().Debug("NewJwtVerifier config-params", zap.String("client_id", clientID), zap.String("issuer_url", issuerURL))
 	}
 
 	return &IdpJwtVerifier{
@@ -112,7 +112,7 @@ func (v *IdpJwtVerifier) verifyJWT(token string, customMapping map[string]string
 	claims := &IdpJwtClaims{}
 
 	if v.ctx.Options.LogSensitive {
-		zap.L().Debug(fmt.Sprintf("VerifyJWT %s", token))
+		zap.L().Debug("VerifyJWT", zap.String("token", token))
 	}
 
 	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), oidcTimeout)
@@ -184,7 +184,7 @@ func (v *IdpJwtVerifier) validateAgainstSpec(claims *IdpJwtClaims, spec IdpJwtVa
 	if !spec.SkipAudienceValidation && len(spec.Audience) > 0 {
 		err := claims.validateAudience(spec.Audience)
 		if err != nil {
-			zap.L().Error(fmt.Sprintf("failed audience check: %v", spec.Audience), zap.Error(err))
+			zap.L().Error("failed audience check", zap.Any("audience", spec.Audience), zap.Error(err))
 			return err
 		}
 	}

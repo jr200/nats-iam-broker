@@ -132,7 +132,7 @@ func (a *AuthService) Respond(req micro.Request, userNKey, serverID, userJwt str
 	}
 
 	if a.ctx.Options.LogSensitive {
-		zap.L().Debug(fmt.Sprintf("minted jwt: %s", userJwt))
+		zap.L().Debug("minted jwt", zap.String("jwt", userJwt))
 	}
 
 	data := []byte(token)
