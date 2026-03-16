@@ -9,7 +9,7 @@ import (
 	internal "github.com/jr200/nats-iam-broker/internal"
 
 	"github.com/nats-io/jwt/v2"
-	"github.com/rs/zerolog/log"
+	"go.uber.org/zap"
 )
 
 // RoleBindingStrategy defines the strategy for matching role bindings.
@@ -37,11 +37,11 @@ func (rbs *RoleBindingStrategy) UnmarshalYAML(unmarshal func(interface{}) error)
 	default:
 		// Default to best_match if the value is empty or unrecognized
 		if strLower == "" {
-			log.Warn().Msgf("role_binding_matching_strategy is empty, defaulting to '%s'", StrategyBestMatch)
+			zap.L().Warn(fmt.Sprintf("role_binding_matching_strategy is empty, defaulting to '%s'", StrategyBestMatch))
 			*rbs = StrategyBestMatch
 			return nil
 		}
-		log.Warn().Msgf("unrecognized role_binding_matching_strategy '%s', defaulting to '%s'", str, StrategyBestMatch)
+		zap.L().Warn(fmt.Sprintf("unrecognized role_binding_matching_strategy '%s', defaulting to '%s'", str, StrategyBestMatch))
 		*rbs = StrategyBestMatch
 		return nil // Or return an error if you want to reject invalid values: fmt.Errorf("invalid role binding strategy: %s", str)
 	}
@@ -117,22 +117,22 @@ func evaluateMatchCriterion(match Match, context map[string]interface{}, binding
 	if match.Expr != "" {
 		program, err := expr.Compile(match.Expr, expr.Env(context), expr.AsBool())
 		if err != nil {
-			log.Error().Err(err).Msgf("match-fail[expr]: compile error for '%s' (Binding Index: %d)", match.Expr, bindingIndex)
+			zap.L().Error(fmt.Sprintf("match-fail[expr]: compile error for '%s' (Binding Index: %d)", match.Expr, bindingIndex), zap.Error(err))
 			return false, ""
 		}
 
 		result, err := expr.Run(program, context)
 		if err != nil {
-			log.Debug().Err(err).Msgf("match-fail[expr]: eval error for '%s' (Binding Index: %d)", match.Expr, bindingIndex)
+			zap.L().Debug(fmt.Sprintf("match-fail[expr]: eval error for '%s' (Binding Index: %d)", match.Expr, bindingIndex), zap.Error(err))
 			return false, ""
 		}
 
 		if boolResult, ok := result.(bool); ok && boolResult {
-			log.Debug().Msgf("match-pass[expr]: %s (Binding Index: %d)", match.Expr, bindingIndex)
+			zap.L().Debug(fmt.Sprintf("match-pass[expr]: %s (Binding Index: %d)", match.Expr, bindingIndex))
 			return true, fmt.Sprintf("expr=%s", match.Expr)
 		}
 
-		log.Debug().Msgf("match-fail[expr]: %s (Binding Index: %d)", match.Expr, bindingIndex)
+		zap.L().Debug(fmt.Sprintf("match-fail[expr]: %s (Binding Index: %d)", match.Expr, bindingIndex))
 		return false, ""
 	}
 
@@ -151,18 +151,18 @@ func evaluateMatchCriterion(match Match, context map[string]interface{}, binding
 		}
 
 		if isPermissionMatched {
-			log.Debug().Msgf("match-pass[permission]: %s (Binding Index: %d)", match.Permission, bindingIndex)
+			zap.L().Debug(fmt.Sprintf("match-pass[permission]: %s (Binding Index: %d)", match.Permission, bindingIndex))
 			return true, fmt.Sprintf("permission=%s", match.Permission)
 		}
 
-		log.Debug().Msgf("match-fail[permission]: %s (Binding Index: %d)", match.Permission, bindingIndex)
+		zap.L().Debug(fmt.Sprintf("match-fail[permission]: %s (Binding Index: %d)", match.Permission, bindingIndex))
 		return false, ""
 	}
 
 	// Handle regular claim-based matching
 	contextValue, exists := context[match.Claim]
 	if !exists {
-		log.Trace().Msgf("match-skip[%s]: claim key not found in context (Binding Index: %d)", match.Claim, bindingIndex)
+		zap.L().Debug(fmt.Sprintf("match-skip[%s]: claim key not found in context (Binding Index: %d)", match.Claim, bindingIndex))
 		return false, "" // Claim doesn't exist, so it's not a match for this criterion
 	}
 
@@ -171,28 +171,28 @@ func evaluateMatchCriterion(match Match, context map[string]interface{}, binding
 	case string:
 		if v == match.Value {
 			isClaimMatched = true
-			log.Debug().Msgf("match-pass[%s]: %s == %s (Binding Index: %d)", match.Claim, match.Value, v, bindingIndex)
+			zap.L().Debug(fmt.Sprintf("match-pass[%s]: %s == %s (Binding Index: %d)", match.Claim, match.Value, v, bindingIndex))
 		}
 	case []interface{}:
 		for _, val := range v {
 			if sv, ok := val.(string); ok && sv == match.Value {
 				isClaimMatched = true
-				log.Debug().Msgf("match-pass[%s]: %s == %s (Binding Index: %d)", match.Claim, match.Value, val, bindingIndex)
+				zap.L().Debug(fmt.Sprintf("match-pass[%s]: %s == %s (Binding Index: %d)", match.Claim, match.Value, val, bindingIndex))
 				break
 			}
 		}
 	case map[string]interface{}:
 		if _, ok := v[match.Value]; ok {
 			isClaimMatched = true
-			log.Debug().Msgf("match-pass[%s]: key '%s' exists in map (Binding Index: %d)", match.Claim, match.Value, bindingIndex)
+			zap.L().Debug(fmt.Sprintf("match-pass[%s]: key '%s' exists in map (Binding Index: %d)", match.Claim, match.Value, bindingIndex))
 		}
 	case map[string]string:
 		if _, ok := v[match.Value]; ok {
 			isClaimMatched = true
-			log.Debug().Msgf("match-pass[%s]: key '%s' exists in map (Binding Index: %d)", match.Claim, match.Value, bindingIndex)
+			zap.L().Debug(fmt.Sprintf("match-pass[%s]: key '%s' exists in map (Binding Index: %d)", match.Claim, match.Value, bindingIndex))
 		}
 	default:
-		log.Trace().Msgf("match-skip[%s]: unsupported type %T (Binding Index: %d)", match.Claim, v, bindingIndex)
+		zap.L().Debug(fmt.Sprintf("match-skip[%s]: unsupported type %T (Binding Index: %d)", match.Claim, v, bindingIndex))
 		// Unsupported type cannot match the string value
 	}
 
@@ -200,7 +200,7 @@ func evaluateMatchCriterion(match Match, context map[string]interface{}, binding
 		return true, fmt.Sprintf("%s=%s", match.Claim, match.Value)
 	}
 
-	log.Debug().Msgf("match-fail[%s]: value '%s' not found in context value '%v' (Binding Index: %d)", match.Claim, match.Value, contextValue, bindingIndex)
+	zap.L().Debug(fmt.Sprintf("match-fail[%s]: value '%s' not found in context value '%v' (Binding Index: %d)", match.Claim, match.Value, contextValue, bindingIndex))
 	return false, ""
 }
 
@@ -221,7 +221,7 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 	var fallbackIndex int
 
 	strategy := c.Rbac.RoleBindingMatchingStrategy
-	log.Debug().Str("strategy", string(strategy)).Msg("Using role binding matching strategy")
+	zap.L().Debug("Using role binding matching strategy", zap.String("strategy", string(strategy)))
 
 	for i, roleBinding := range c.Rbac.RoleBinding {
 		currentMatches := 0
@@ -232,7 +232,7 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 			if fallbackBinding == nil {
 				fallbackBinding = &c.Rbac.RoleBinding[i]
 				fallbackIndex = i
-				log.Debug().Msgf("recorded fallback role binding at index %d (account: %s)", i, roleBinding.Account)
+				zap.L().Debug(fmt.Sprintf("recorded fallback role binding at index %d (account: %s)", i, roleBinding.Account))
 			}
 			continue
 		}
@@ -265,13 +265,12 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 			// because no criterion failed, but also ensures all criteria were indeed met.
 			if bindingFullyMatched && currentMatches == numMatchCriteria {
 				// Strict match found! Use the first one found
-				log.Debug().
-					Int("matched_count", currentMatches).
-					Int("required_count", numMatchCriteria).
-					Int("binding_index", i).
-					Str("role_binding_account", roleBinding.Account).
-					Strs("matched_on", currentMatchedOn).
-					Msg("selected first strictly matching role binding")
+				zap.L().Debug("selected first strictly matching role binding",
+					zap.Int("matched_count", currentMatches),
+					zap.Int("required_count", numMatchCriteria),
+					zap.Int("binding_index", i),
+					zap.String("role_binding_account", roleBinding.Account),
+					zap.Strings("matched_on", currentMatchedOn))
 
 				permissions, limits, err := c.collateRoles(roleBinding.Roles)
 				if err != nil {
@@ -313,7 +312,7 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 					roleBindingName:  fmt.Sprintf("%s (Index: %d)", roleBinding.Account, i), // More descriptive name
 					matchedOn:        currentMatchedOn,
 				}
-				log.Debug().Msgf("new best match found (Index: %d, Matches: %d, Criteria: %d)", i, currentMatches, numMatchCriteria)
+				zap.L().Debug(fmt.Sprintf("new best match found (Index: %d, Matches: %d, Criteria: %d)", i, currentMatches, numMatchCriteria))
 			}
 		}
 	}
@@ -323,10 +322,9 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 	if strategy == StrategyStrict {
 		// If we finished the loop in strict mode, no binding fully matched
 		if fallbackBinding != nil {
-			log.Debug().
-				Int("binding_index", fallbackIndex).
-				Str("role_binding_account", fallbackBinding.Account).
-				Msg("no strict match found, using fallback role binding")
+			zap.L().Debug("no strict match found, using fallback role binding",
+				zap.Int("binding_index", fallbackIndex),
+				zap.String("role_binding_account", fallbackBinding.Account))
 			permissions, limits, err := c.collateRoles(fallbackBinding.Roles)
 			if err != nil {
 				return "", nil, nil, Duration{}, err
@@ -339,10 +337,9 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 	// best_match: Check if any match was found
 	if bestMatch.matches == 0 {
 		if fallbackBinding != nil {
-			log.Debug().
-				Int("binding_index", fallbackIndex).
-				Str("role_binding_account", fallbackBinding.Account).
-				Msg("no best_match found, using fallback role binding")
+			zap.L().Debug("no best_match found, using fallback role binding",
+				zap.Int("binding_index", fallbackIndex),
+				zap.String("role_binding_account", fallbackBinding.Account))
 			permissions, limits, err := c.collateRoles(fallbackBinding.Roles)
 			if err != nil {
 				return "", nil, nil, Duration{}, err
@@ -352,12 +349,11 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 		return "", nil, nil, Duration{}, fmt.Errorf("no role-binding matched idp token using best_match strategy")
 	}
 
-	log.Debug().
-		Int("matches", bestMatch.matches).
-		Int("criteria_count", bestMatch.numMatchCriteria).
-		Str("role_binding", bestMatch.roleBindingName).
-		Strs("matched_on", bestMatch.matchedOn).
-		Msg("selected role binding using best_match strategy")
+	zap.L().Debug("selected role binding using best_match strategy",
+		zap.Int("matches", bestMatch.matches),
+		zap.Int("criteria_count", bestMatch.numMatchCriteria),
+		zap.String("role_binding", bestMatch.roleBindingName),
+		zap.Strings("matched_on", bestMatch.matchedOn))
 
 	return bestMatch.account, bestMatch.permissions, bestMatch.limits, bestMatch.maxExpiry, nil
 }
@@ -389,22 +385,22 @@ func (c *Config) collateRoles(roles []string) (*jwt.Permissions, *jwt.Limits, er
 			return nil, nil, err
 		}
 
-		log.Trace().Msgf(
+		zap.L().Debug(fmt.Sprintf(
 			"-- assigning role [%s]: permissions=%v, limits=%v",
 			roleName,
 			string(internal.IgnoreError(json.Marshal(role.Permissions))),
 			string(internal.IgnoreError(json.Marshal(role.Limits))),
-		)
+		))
 
 		collatePermissions(&allPermissions, &role.Permissions)
 		collateLimits(&allLimits, &role.Limits)
 	}
 
-	log.Debug().Msgf(
+	zap.L().Debug(fmt.Sprintf(
 		"-- collatedRoles: permissions=%v, limits=%v",
 		string(internal.IgnoreError(json.Marshal(allPermissions))),
 		string(internal.IgnoreError(json.Marshal(allLimits))),
-	)
+	))
 
 	return &allPermissions, &allLimits, nil
 }

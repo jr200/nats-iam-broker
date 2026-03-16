@@ -9,7 +9,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/rs/zerolog/log"
+	"go.uber.org/zap"
 )
 
 func b64Encode(input string) string {
@@ -22,7 +22,7 @@ func trim(input string) string {
 
 func readFile(filePath string) (string, error) {
 	resolvedFile := os.ExpandEnv(filePath)
-	log.Trace().Msgf("filter:readFile %s", resolvedFile)
+	zap.L().Debug("filter:readFile", zap.String("path", resolvedFile))
 	content, err := os.ReadFile(resolvedFile)
 	if err != nil {
 		return "", err
@@ -32,7 +32,7 @@ func readFile(filePath string) (string, error) {
 
 // readNthLine reads the nth line of a file.
 func readNthLine(n int, filePath string) (string, error) {
-	log.Trace().Msgf("filter:readNthLine[%d] %s", n, filePath)
+	zap.L().Debug("filter:readNthLine", zap.Int("line", n), zap.String("path", filePath))
 
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -79,7 +79,7 @@ func strJoin(input []interface{}, separators ...string) string {
 
 func renderAllTemplates(content string, mappings map[string]interface{}, params ConfigParams) string {
 	pattern := fmt.Sprintf(`%s[^\n]*?%s`, regexp.QuoteMeta(params.LeftDelim), regexp.QuoteMeta(params.RightDelim))
-	log.Debug().Msgf("template-pattern: %s", pattern)
+	zap.L().Debug("template-pattern", zap.String("pattern", pattern))
 	re := regexp.MustCompile(pattern)
 
 	matches := re.FindAllStringIndex(content, -1)
@@ -120,17 +120,17 @@ func tryRenderTemplate(input string, context map[string]interface{}, params Conf
 		"trim":        trim,
 	}).Parse(processed)
 	if err != nil {
-		log.Err(err).Msgf("bad configuration template, %s", input)
+		zap.L().Error("bad configuration template", zap.String("input", input), zap.Error(err))
 		return input
 	}
 
 	var rendered strings.Builder
 	if err := tmpl.Execute(&rendered, context); err != nil {
-		log.Trace().Msgf("[render failed]. input=%s, context=%v, err=%v", input, context, err)
+		zap.L().Debug("[render failed]", zap.String("input", input), zap.Any("context", context), zap.Error(err))
 		return input
 	}
 
 	result := rendered.String()
-	log.Trace().Msgf("[render ok] %s => %s", input, SecureLogKey(result))
+	zap.L().Debug("[render ok]", zap.String("input", input), zap.String("result", SecureLogKey(result)))
 	return result
 }

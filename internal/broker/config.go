@@ -13,7 +13,7 @@ import (
 	"github.com/goccy/go-yaml"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
-	"github.com/rs/zerolog/log"
+	"go.uber.org/zap"
 	"github.com/xhit/go-str2duration/v2"
 )
 
@@ -195,7 +195,7 @@ func (cm *ConfigManager) GetConfig(mappings map[string]interface{}) (*Config, er
 			return strings.ContainsRune(illegalChars, r)
 		})
 
-		log.Warn().Str("original", cfg.Service.Name).Str("sanitized", sanitizedName).Msg("Service name contained illegal characters for NATS subjects, sanitizing")
+		zap.L().Warn("Service name contained illegal characters for NATS subjects, sanitizing", zap.String("original", cfg.Service.Name), zap.String("sanitized", sanitizedName))
 		cfg.Service.Name = sanitizedName
 	}
 
@@ -259,7 +259,7 @@ func (v *Duration) UnmarshalText(text []byte) error {
 	d, err := str2duration.ParseDuration(string(text))
 	if err != nil {
 		// possibly templated — will be re-parsed after template rendering
-		log.Warn().Msgf("failed to parse duration from '%s' (%v)", string(text), err)
+		zap.L().Warn(fmt.Sprintf("failed to parse duration from '%s' (%v)", string(text), err))
 		return nil
 	}
 	v.Duration = d
@@ -272,7 +272,7 @@ func (v *NKey) UnmarshalText(text []byte) error {
 	nkey, err := nkeys.FromSeed(text)
 	if err != nil {
 		// possibly templated — will be re-parsed after template rendering
-		log.Warn().Msgf("skipped parsing nkey: %v (%v)", SecureLogKey(string(text)), err)
+		zap.L().Warn(fmt.Sprintf("skipped parsing nkey: %v (%v)", SecureLogKey(string(text)), err))
 		return nil
 	}
 	v.KeyPair = nkey
@@ -472,7 +472,7 @@ func mergeConfigurationFiles(files []string) (string, error) {
 		}
 
 		for _, filePath := range paths {
-			log.Debug().Msgf("merging config %s", filePath)
+			zap.L().Debug("merging config", zap.String("file", filePath))
 			raw, err := os.ReadFile(filePath)
 			if err != nil {
 				return "", fmt.Errorf("error reading file content: %v", err)

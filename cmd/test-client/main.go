@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jr200/nats-iam-broker/internal/logging"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	"go.uber.org/zap"
 )
 
 // TestCase defines the available test cases.
@@ -77,19 +77,6 @@ func main() {
 	}
 }
 
-func configureLogging(logLevel string, logHumanReadable bool) {
-	level, err := zerolog.ParseLevel(logLevel)
-	if err != nil {
-		level = zerolog.InfoLevel
-	}
-	zerolog.SetGlobalLevel(level)
-
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	if logHumanReadable {
-		log.Logger = log.With().Str("app", "client").Logger().Output(zerolog.ConsoleWriter{Out: os.Stdout})
-	}
-}
-
 func run() error {
 	var (
 		logLevel    string
@@ -110,15 +97,16 @@ func run() error {
 	flag.StringVar(&testCaseStr, "run-test", "", fmt.Sprintf("nats test to run (%s)", ListTestCases()))
 
 	flag.Parse()
-	configureLogging(logLevel, true)
+	logging.Setup(logLevel, true)
+	defer func() { _ = zap.L().Sync() }()
 
 	if testCaseStr != "" {
-		log.Info().Msgf("running test, type: %s, args: %v", testCaseStr, flag.Args())
+		zap.L().Info("running test", zap.String("type", testCaseStr), zap.Strings("args", flag.Args()))
 	}
 
-	log.Trace().Msgf("sending jwt %s", idpJwt)
+	zap.L().Debug("sending jwt", zap.String("jwt", idpJwt))
 	if token != "" {
-		log.Trace().Msg("using authentication token")
+		zap.L().Debug("using authentication token")
 	}
 
 	var natsErr = false
@@ -126,17 +114,17 @@ func run() error {
 
 	options := []nats.Option{
 		nats.LameDuckModeHandler(func(_ *nats.Conn) {
-			log.Info().Msg("Incoming Event, LDM. Client has been requested to reconnect")
+			zap.L().Info("Incoming Event, LDM. Client has been requested to reconnect")
 		}),
 		nats.ReconnectHandler(func(_ *nats.Conn) {
-			log.Info().Msg("nats client reconnected")
+			zap.L().Info("nats client reconnected")
 		}),
 		nats.ConnectHandler(func(_ *nats.Conn) {
-			log.Info().Msgf("connected to nats on %s", nc.ConnectedUrl())
+			zap.L().Info("connected to nats", zap.String("url", nc.ConnectedUrl()))
 		}),
 		nats.Name("test-client"),
 		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
-			log.Err(err).Msg("received nats-error")
+			zap.L().Error("received nats-error", zap.Error(err))
 			natsErr = true
 		}),
 	}
@@ -154,7 +142,7 @@ func run() error {
 	var connectionErr error
 	nc, connectionErr = nats.Connect(natsURL, options...)
 	if connectionErr != nil {
-		log.Error().Err(connectionErr).Msg("failed to connect")
+		zap.L().Error("failed to connect", zap.Error(connectionErr))
 		// If not running a specific test, return the error immediately
 		if testCaseStr == "" {
 			return fmt.Errorf("failed to connect: %w", connectionErr)
@@ -168,7 +156,7 @@ func run() error {
 		var testErr error
 
 		if nc == nil { // Check if connection failed earlier
-			log.Error().Msgf("test [%s] failed due to connection error", testCaseStr)
+			zap.L().Error("test failed due to connection error", zap.String("test", testCaseStr))
 			testFailed = true
 		} else {
 			// Connection succeeded, proceed with test case
@@ -176,25 +164,24 @@ func run() error {
 			time.Sleep(time.Duration(clientSleep) * time.Second)
 
 			if testErr != nil {
-				log.Err(testErr).Msgf("test [%s] failed. err from test-client.", testCaseStr)
+				zap.L().Error("test failed", zap.String("test", testCaseStr), zap.Error(testErr))
 				testFailed = true
 			}
 			if natsErr { // natsErr is set by the async error handler
-				log.Error().Msgf("test [%s] failed due to nats error.", testCaseStr)
+				zap.L().Error("test failed due to nats error", zap.String("test", testCaseStr))
 				testFailed = true
 			}
 		}
 
 		if !testFailed {
-			log.Info().Msgf("test successful, type: %s, args: %v", testCaseStr, flag.Args())
+			zap.L().Info("test successful", zap.String("type", testCaseStr), zap.Strings("args", flag.Args()))
 		}
 	}
 
 	// Only drain if the connection was successful
 	if nc != nil {
 		if err := nc.Drain(); err != nil {
-			log.Err(err).Msg("error draining NATS connection")
-			// Potentially return this error if draining failure is critical
+			zap.L().Error("error draining NATS connection", zap.Error(err))
 		}
 	}
 
@@ -202,10 +189,10 @@ func run() error {
 }
 
 func runTestCase(nc *nats.Conn, testCaseStr string, args []string) error {
-	log.Trace().Msgf("in runTestCase: test-case type: %s, args: %v", testCaseStr, args)
+	zap.L().Debug("in runTestCase", zap.String("type", testCaseStr), zap.Strings("args", args))
 
 	if testCaseStr == "" {
-		log.Trace().Msg("no test to run")
+		zap.L().Debug("no test to run")
 		return nil
 	}
 
@@ -220,7 +207,7 @@ func runTestCase(nc *nats.Conn, testCaseStr string, args []string) error {
 			return errors.New("sub test requires a subject")
 		}
 		ns, err := nc.Subscribe(args[0], func(msg *nats.Msg) {
-			log.Info().Msgf("got-msg: %s", msg.Data)
+			zap.L().Info("got-msg", zap.ByteString("data", msg.Data))
 			_ = msg.Ack()
 		})
 
@@ -232,7 +219,7 @@ func runTestCase(nc *nats.Conn, testCaseStr string, args []string) error {
 			return errors.New("invalid subscription")
 		}
 
-		log.Info().Msgf("subscribed ok: %v", ns)
+		zap.L().Info("subscribed ok", zap.Any("subscription", ns))
 
 	case Pub:
 		if len(args) < PubReqArgs {
@@ -248,7 +235,7 @@ func runTestCase(nc *nats.Conn, testCaseStr string, args []string) error {
 			return errors.New("pubsub test requires a subject and a message")
 		}
 		_, err := nc.Subscribe(args[0], func(msg *nats.Msg) {
-			log.Info().Msgf("got-msg: %s", msg.Data)
+			zap.L().Info("got-msg", zap.ByteString("data", msg.Data))
 			_ = msg.Ack()
 		})
 		if err != nil {
@@ -332,7 +319,7 @@ func subscribeJetstream(js jetstream.Stream, name string, msgCount int) error {
 		return err
 	}
 	c, err := consumer.Consume(func(msg jetstream.Msg) {
-		log.Info().Msgf("consumed-msg[%s]: %s", msg.Subject(), msg.Data())
+		zap.L().Info("consumed-msg", zap.String("subject", msg.Subject()), zap.ByteString("data", msg.Data()))
 		_ = msg.Ack()
 		wg.Done()
 	})

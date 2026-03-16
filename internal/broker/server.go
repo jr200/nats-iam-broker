@@ -12,8 +12,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/micro"
 	"github.com/nats-io/nkeys"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	"go.uber.org/zap"
 )
 
 func Start(configFiles []string, serverOpts *Options) error {
@@ -27,13 +26,11 @@ func Start(configFiles []string, serverOpts *Options) error {
 
 	config, err := configManager.GetConfig(make(map[string]interface{}))
 	if err != nil {
-		log.Err(err).Msg("bad configuration")
+		zap.L().Error("bad configuration", zap.Error(err))
 		return err
 	}
 
-	log.Logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
-		return c.Str("name", config.Service.Name)
-	})
+	zap.ReplaceGlobals(zap.L().Named(config.Service.Name))
 
 	// Connect to NATS
 	natsOpts := config.natsOptions()
@@ -43,12 +40,12 @@ func Start(configFiles []string, serverOpts *Options) error {
 		if nc != nil {
 			err := nc.Drain()
 			if err != nil {
-				log.Err(err).Msg("error draining NATS connection")
+				zap.L().Error("error draining NATS connection", zap.Error(err))
 			}
 		}
 	}
 
-	log.Info().Msgf("connecting to %s", config.NATS.URL)
+	zap.L().Info("connecting to NATS", zap.String("url", config.NATS.URL))
 	nc, err := nats.Connect(config.NATS.URL, natsOpts...)
 	if err != nil {
 		return err
@@ -63,14 +60,14 @@ func Start(configFiles []string, serverOpts *Options) error {
 
 	auditEventSubject := config.Service.Name + ".evt.audit.account.%s.user.%s.created"
 	//nolint:mnd // 2 is the number of %s placeholders in auditEventSubject
-	log.Info().Msgf("Audit events will be published to: %s", strings.Replace(auditEventSubject, "%s", "*", 2))
+	zap.L().Info("audit events configured", zap.String("subject_pattern", strings.Replace(auditEventSubject, "%s", "*", 2)))
 
 	auth := NewAuthService(ctx, config.Service.Account.SigningNKey.KeyPair, config.serviceEncryptionXkey(), func(request *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error) {
 		var tokenReq TokenRequest
 		var idpRawJwt string
 
 		if ctx.Options.LogSensitive {
-			log.Trace().Msgf("NewAuthService (request): %s", request)
+			zap.L().Debug("NewAuthService request", zap.Any("request", request))
 		}
 
 		if request.ConnectOptions.Token != "" {
@@ -106,7 +103,7 @@ func Start(configFiles []string, serverOpts *Options) error {
 				defer userInfoCancel()
 				userInfo, err := matchedVerifier.verifier.GetUserInfo(userInfoCtx, tokenReq.AccessToken, verifiedIDToken)
 				if err != nil {
-					log.Warn().Err(err).Msg("failed to fetch user info")
+					zap.L().Warn("failed to fetch user info", zap.Error(err))
 				} else {
 					// Merge user info into claims
 					claims := reqClaims.toMap()
@@ -116,7 +113,7 @@ func Start(configFiles []string, serverOpts *Options) error {
 					reqClaims.fromMap(claims, matchedVerifier.config.CustomMapping)
 				}
 			} else {
-				log.Debug().Msg("skipping user info fetch - no access token available")
+				zap.L().Debug("skipping user info fetch - no access token available")
 			}
 		}
 
@@ -127,28 +124,28 @@ func Start(configFiles []string, serverOpts *Options) error {
 		reqClaims.fromMap(reqJwtClaims, matchedVerifier.config.CustomMapping)
 
 		if ctx.Options.LogSensitive {
-			log.Debug().Msgf("reqClaims: %v", reqClaims.toMap())
+			zap.L().Debug("reqClaims", zap.Any("claims", reqClaims.toMap()))
 		}
 
 		// Lets render the config with a different mapping:
 		cfgForRequest, err := configManager.GetConfig(reqClaims.toMap())
 		if err != nil {
-			log.Error().Err(err).Msg("error rendering config against idp-jwt")
+			zap.L().Error("error rendering config against idp-jwt", zap.Error(err))
 			return nil, nil, nil, err
 		}
 		userAccountName, permissions, limits, roleBindingTokenMaxExpiry, err := cfgForRequest.lookupUserAccount(reqClaims.toMap())
 		if err != nil {
-			log.Error().Err(err).Msg("error looking up user account")
+			zap.L().Error("error looking up user account", zap.Error(err))
 			return nil, nil, nil, err
 		}
 		userAccountInfo, err := config.lookupAccountInfo(userAccountName)
 		if err != nil {
-			log.Error().Err(err).Msg("error looking up account-info")
+			zap.L().Error("error looking up account-info", zap.Error(err))
 			return nil, nil, nil, err
 		}
 
 		if ctx.Options.LogSensitive {
-			log.Debug().Msgf("userAccountInfo: %v", userAccountInfo)
+			zap.L().Debug("userAccountInfo", zap.Any("info", userAccountInfo))
 		}
 
 		// setup claims for user's nats-jwt
@@ -174,7 +171,7 @@ func Start(configFiles []string, serverOpts *Options) error {
 		// Determine the type of signing key used
 		signingKeyInfo, err := determineSigningKeyType(claims, userAccountInfo.SigningNKey.KeyPair, userAccountInfo)
 		if err != nil {
-			log.Warn().Err(err).Msg("failed to determine signing key type for audit event")
+			zap.L().Warn("failed to determine signing key type for audit event", zap.Error(err))
 		}
 
 		// Publish user creation event with detailed information
@@ -201,18 +198,18 @@ func Start(configFiles []string, serverOpts *Options) error {
 
 		eventJSON, err := json.Marshal(userEvent)
 		if err != nil {
-			log.Warn().Err(err).Msg("failed to marshal user creation event")
+			zap.L().Warn("failed to marshal user creation event", zap.Error(err))
 		} else {
 			err = nc.Publish(fmt.Sprintf(auditEventSubject, userAccountName, request.UserNkey), eventJSON)
 			if err != nil {
-				log.Warn().Err(err).Msg("failed to publish user creation event")
+				zap.L().Warn("failed to publish user creation event", zap.Error(err))
 			}
 		}
 
 		return claims, userAccountInfo.SigningNKey.KeyPair, userAccountInfo, nil
 	})
 
-	log.Info().Msgf("Starting service v%s", config.Service.Version)
+	zap.L().Info("starting service", zap.String("version", config.Service.Version))
 
 	_, err = micro.AddService(nc, micro.Config{
 		Name:        config.Service.Name,
@@ -227,12 +224,12 @@ func Start(configFiles []string, serverOpts *Options) error {
 		return err
 	}
 
-	log.Info().Msgf("Listening to $SYS.REQ.USER.AUTH on %s", nc.ConnectedAddr())
+	zap.L().Info("listening for auth requests", zap.String("subject", "$SYS.REQ.USER.AUTH"), zap.String("addr", nc.ConnectedAddr()))
 
 	// Block and wait for interrupt signal
 	internal.WaitForInterrupt()
 
-	log.Info().Msg("Exiting...")
+	zap.L().Info("exiting")
 	return nil
 }
 

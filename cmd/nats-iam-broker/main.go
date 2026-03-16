@@ -6,14 +6,15 @@ import (
 	"os"
 
 	"github.com/jr200/nats-iam-broker/internal/broker"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	"github.com/jr200/nats-iam-broker/internal/logging"
+	"go.uber.org/zap"
 )
 
 var serverOpts *broker.Options
 
 func main() {
 	configFiles := parseFlags()
+	defer func() { _ = zap.L().Sync() }()
 
 	if err := broker.Start(configFiles, serverOpts); err != nil {
 		fmt.Fprintf(os.Stderr, "[service stderr]: %v\n", err)
@@ -41,20 +42,7 @@ func parseFlags() []string {
 		os.Exit(1)
 	}
 
-	configureLogging(logLevel, logHumanReadable)
+	logging.Setup(logLevel, logHumanReadable)
 
 	return configFiles
-}
-
-func configureLogging(logLevel string, logHumanReadable bool) {
-	level, err := zerolog.ParseLevel(logLevel)
-	if err != nil {
-		level = zerolog.InfoLevel
-	}
-	zerolog.SetGlobalLevel(level)
-
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	if logHumanReadable {
-		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
-	}
 }

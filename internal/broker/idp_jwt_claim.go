@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/rs/zerolog/log"
+	"go.uber.org/zap"
 )
 
 // Mapping of JSON field names to struct field names
@@ -95,13 +95,13 @@ func (j *IdpJwtClaims) toMap() map[string]interface{} {
 	// Marshal standard fields
 	jsonBytes, err := json.Marshal(j)
 	if err != nil {
-		log.Err(err)
+		zap.L().Error("failed to marshal claims", zap.Error(err))
 		return result
 	}
 
 	// Unmarshal standard fields
 	if err := json.Unmarshal(jsonBytes, &result); err != nil {
-		log.Err(err)
+		zap.L().Error("failed to unmarshal claims", zap.Error(err))
 		return result
 	}
 
@@ -115,7 +115,7 @@ func (j *IdpJwtClaims) toMap() map[string]interface{} {
 
 func (j *IdpJwtClaims) exists(expected []string) error {
 	claimsMap := j.toMap()
-	log.Trace().Msgf("idp claims: %v", claimsMap)
+	zap.L().Debug("idp claims", zap.Any("claims", claimsMap))
 	for _, claimName := range expected {
 		_, found := claimsMap[claimName]
 

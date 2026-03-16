@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -135,7 +134,6 @@ func TestNewIdpVerifiers(t *testing.T) {
 	// uses a logger passed via context or other means, NOT the potentially
 	// inaccessible global server.Log
 	logOutput := &bytes.Buffer{}
-	_ = zerolog.New(logOutput).Level(zerolog.ErrorLevel).With().Timestamp().Logger() // Assign to blank identifier
 
 	// Passing nil for server.Context as its structure is unclear and causing issues.
 	// If NewIdpVerifiers requires a non-nil context with specific fields,

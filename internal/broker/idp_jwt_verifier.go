@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/rs/zerolog/log"
+	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 )
 
@@ -27,11 +27,11 @@ func NewIdpVerifiers(ctx *Context, config *Config) ([]IdpAndJwtVerifier, error) 
 		idpVerifier, err := NewJwtVerifier(ctx, idp.ClientID, idp.IssuerURL)
 		if err != nil {
 			if idp.IgnoreSetupError {
-				log.Warn().Err(err).Str("issuer_url", idp.IssuerURL).Str("client_id", idp.ClientID).Msg("Failed to setup IDP verifier, ignoring due to config")
+				zap.L().Warn("Failed to setup IDP verifier, ignoring due to config", zap.Error(err), zap.String("issuer_url", idp.IssuerURL), zap.String("client_id", idp.ClientID))
 				continue // Skip this IDP and continue with the next one
 			}
 
-			log.Error().Err(err).Str("issuer_url", idp.IssuerURL).Str("client_id", idp.ClientID).Msg("Failed to setup IDP verifier, halting startup")
+			zap.L().Error("Failed to setup IDP verifier, halting startup", zap.Error(err), zap.String("issuer_url", idp.IssuerURL), zap.String("client_id", idp.ClientID))
 			return nil, fmt.Errorf("failed to setup verifier for IDP %s (%s): %w", idp.Description, idp.IssuerURL, err)
 		}
 		idpVerifiers = append(idpVerifiers, IdpAndJwtVerifier{idpVerifier, idp}) // Pass the pointer to the config
@@ -42,22 +42,22 @@ func NewIdpVerifiers(ctx *Context, config *Config) ([]IdpAndJwtVerifier, error) 
 func runVerification(jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims, *IdpAndJwtVerifier, *oidc.IDToken, error) {
 	for _, item := range items {
 		if item.verifier.ctx.Options.LogSensitive {
-			log.Debug().Msgf("verifying jwt against spec. jwt=[%s], spec=[%v]", jwtToken, item.config.ValidationSpec)
+			zap.L().Debug(fmt.Sprintf("verifying jwt against spec. jwt=[%s], spec=[%v]", jwtToken, item.config.ValidationSpec))
 		}
 		reqClaims, idToken, err := item.verifier.verifyJWT(jwtToken, item.config.CustomMapping)
 		if err != nil {
 			var expiredErr *oidc.TokenExpiredError
 			if errors.As(err, &expiredErr) {
-				log.Debug().Msgf("error verifying idp-jwt, %s. Token expired at %v", item.config.Description, expiredErr.Expiry)
+				zap.L().Debug(fmt.Sprintf("error verifying idp-jwt, %s. Token expired at %v", item.config.Description, expiredErr.Expiry))
 				continue
 			}
-			log.Trace().Err(err).Msgf("error verifying idp-jwt, %s. Trying next idp...", item.config.Description)
+			zap.L().Debug(fmt.Sprintf("error verifying idp-jwt, %s. Trying next idp...", item.config.Description), zap.Error(err))
 			continue
 		}
 
 		err = item.verifier.validateAgainstSpec(reqClaims, item.config.ValidationSpec)
 		if err != nil {
-			log.Trace().Err(err).Msg("failed checks in idp validation")
+			zap.L().Debug("failed checks in idp validation", zap.Error(err))
 			continue
 		}
 
@@ -87,12 +87,12 @@ func NewJwtVerifier(ctx *Context, clientID string, issuerURL string) (*IdpJwtVer
 
 	provider, err := oidc.NewProvider(providerCtx, issuerURL)
 	if err != nil {
-		log.Err(err)
+		zap.L().Error("error creating OIDC provider", zap.Error(err))
 		return nil, err
 	}
 
 	if ctx.Options.LogSensitive {
-		log.Trace().Msgf("NewJwtVerifier (config-params) clientId=%s, issuerUrl=%s", clientID, issuerURL)
+		zap.L().Debug(fmt.Sprintf("NewJwtVerifier (config-params) clientId=%s, issuerUrl=%s", clientID, issuerURL))
 	}
 
 	return &IdpJwtVerifier{
@@ -112,7 +112,7 @@ func (v *IdpJwtVerifier) verifyJWT(token string, customMapping map[string]string
 	claims := &IdpJwtClaims{}
 
 	if v.ctx.Options.LogSensitive {
-		log.Trace().Msgf("VerifyJWT %s", token)
+		zap.L().Debug(fmt.Sprintf("VerifyJWT %s", token))
 	}
 
 	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), oidcTimeout)
@@ -184,7 +184,7 @@ func (v *IdpJwtVerifier) validateAgainstSpec(claims *IdpJwtClaims, spec IdpJwtVa
 	if !spec.SkipAudienceValidation && len(spec.Audience) > 0 {
 		err := claims.validateAudience(spec.Audience)
 		if err != nil {
-			log.Error().Err(err).Msgf("failed audience check: %v", spec.Audience)
+			zap.L().Error(fmt.Sprintf("failed audience check: %v", spec.Audience), zap.Error(err))
 			return err
 		}
 	}
