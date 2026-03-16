@@ -1,10 +1,13 @@
 package broker
 
 import (
+	"fmt"
 	"os"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/goccy/go-yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -197,6 +200,296 @@ func TestConfigParsePhase_Atomic(t *testing.T) {
 
 		wg.Wait()
 	})
+}
+
+func TestDeepMerge(t *testing.T) {
+	tests := []struct {
+		name     string
+		base     map[string]interface{}
+		overlay  map[string]interface{}
+		expected map[string]interface{}
+	}{
+		{
+			name:     "disjoint keys",
+			base:     map[string]interface{}{"a": 1},
+			overlay:  map[string]interface{}{"b": 2},
+			expected: map[string]interface{}{"a": 1, "b": 2},
+		},
+		{
+			name:     "overlay primitive wins",
+			base:     map[string]interface{}{"a": "old"},
+			overlay:  map[string]interface{}{"a": "new"},
+			expected: map[string]interface{}{"a": "new"},
+		},
+		{
+			name:     "overlay bool wins",
+			base:     map[string]interface{}{"flag": true},
+			overlay:  map[string]interface{}{"flag": false},
+			expected: map[string]interface{}{"flag": false},
+		},
+		{
+			name: "nested maps merged recursively",
+			base: map[string]interface{}{
+				"nested": map[string]interface{}{"a": 1, "b": 2},
+			},
+			overlay: map[string]interface{}{
+				"nested": map[string]interface{}{"b": 99, "c": 3},
+			},
+			expected: map[string]interface{}{
+				"nested": map[string]interface{}{"a": 1, "b": 99, "c": 3},
+			},
+		},
+		{
+			name: "arrays concatenated",
+			base: map[string]interface{}{
+				"items": []interface{}{"a", "b"},
+			},
+			overlay: map[string]interface{}{
+				"items": []interface{}{"c"},
+			},
+			expected: map[string]interface{}{
+				"items": []interface{}{"a", "b", "c"},
+			},
+		},
+		{
+			name: "empty arrays concatenated",
+			base: map[string]interface{}{
+				"items": []interface{}{},
+			},
+			overlay: map[string]interface{}{
+				"items": []interface{}{},
+			},
+			expected: map[string]interface{}{
+				"items": []interface{}{},
+			},
+		},
+		{
+			name: "array in base non-array in overlay",
+			base: map[string]interface{}{
+				"items": []interface{}{"a"},
+			},
+			overlay: map[string]interface{}{
+				"items": "override",
+			},
+			expected: map[string]interface{}{
+				"items": "override",
+			},
+		},
+		{
+			name: "map in base non-map in overlay",
+			base: map[string]interface{}{
+				"nested": map[string]interface{}{"a": 1},
+			},
+			overlay: map[string]interface{}{
+				"nested": "flat",
+			},
+			expected: map[string]interface{}{
+				"nested": "flat",
+			},
+		},
+		{
+			name: "deeply nested merge (3 levels)",
+			base: map[string]interface{}{
+				"l1": map[string]interface{}{
+					"l2": map[string]interface{}{
+						"l3":   "base",
+						"keep": "yes",
+					},
+				},
+			},
+			overlay: map[string]interface{}{
+				"l1": map[string]interface{}{
+					"l2": map[string]interface{}{
+						"l3": "overlay",
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"l1": map[string]interface{}{
+					"l2": map[string]interface{}{
+						"l3":   "overlay",
+						"keep": "yes",
+					},
+				},
+			},
+		},
+		{
+			name:     "empty overlay preserves base",
+			base:     map[string]interface{}{"a": 1, "b": 2},
+			overlay:  map[string]interface{}{},
+			expected: map[string]interface{}{"a": 1, "b": 2},
+		},
+		{
+			name:     "empty base returns overlay",
+			base:     map[string]interface{}{},
+			overlay:  map[string]interface{}{"x": "y"},
+			expected: map[string]interface{}{"x": "y"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := deepMerge(tt.base, tt.overlay)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+
+	t.Run("base not mutated", func(t *testing.T) {
+		base := map[string]interface{}{"a": 1}
+		overlay := map[string]interface{}{"a": 2, "b": 3}
+		deepMerge(base, overlay)
+		assert.Equal(t, map[string]interface{}{"a": 1}, base)
+	})
+}
+
+func TestDurationUnmarshalYAML(t *testing.T) {
+	type wrapper struct {
+		D Duration `yaml:"d"`
+	}
+
+	tests := []struct {
+		name     string
+		input    string
+		expected time.Duration
+		wantErr  bool
+	}{
+		{
+			name:     "string duration 1h",
+			input:    "d: \"1h\"",
+			expected: 1 * time.Hour,
+		},
+		{
+			name:     "string duration 30m",
+			input:    "d: \"30m\"",
+			expected: 30 * time.Minute,
+		},
+		{
+			name:     "string duration 1h30m",
+			input:    "d: \"1h30m\"",
+			expected: 90 * time.Minute,
+		},
+		{
+			name:     "integer seconds via str2duration",
+			input:    "d: \"1000000000ns\"",
+			expected: 1 * time.Second,
+		},
+		{
+			name:     "map with value key",
+			input:    "d:\n  value: \"2h\"",
+			expected: 2 * time.Hour,
+		},
+		{
+			name:     "map with max key",
+			input:    "d:\n  max: \"45m\"",
+			expected: 45 * time.Minute,
+		},
+		{
+			name:     "map with min key",
+			input:    "d:\n  min: \"5m\"",
+			expected: 5 * time.Minute,
+		},
+		{
+			name:    "map with unknown keys",
+			input:   "d:\n  foo: \"1h\"",
+			wantErr: true,
+		},
+		{
+			name:     "zero duration from empty string",
+			input:    "d: \"0s\"",
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var w wrapper
+			err := yaml.Unmarshal([]byte(tt.input), &w)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, w.D.Duration)
+			}
+		})
+	}
+}
+
+func TestImproveYAMLErrorMessage(t *testing.T) {
+	tests := []struct {
+		name           string
+		inputErr       error
+		wantChanged    bool
+		wantSubstrings []string
+	}{
+		{
+			name:        "non-unmarshal error passes through",
+			inputErr:    fmt.Errorf("syntax error at line 5"),
+			wantChanged: false,
+		},
+		{
+			name:        "map into array with line number",
+			inputErr:    fmt.Errorf("line 10: cannot unmarshal !!map into []broker.Idp"),
+			wantChanged: true,
+			wantSubstrings: []string{
+				"single object where an array was expected",
+				"10",
+				"broker.Idp",
+			},
+		},
+		{
+			name:        "map into array without line number",
+			inputErr:    fmt.Errorf("cannot unmarshal !!map into []broker.Idp"),
+			wantChanged: true,
+			wantSubstrings: []string{
+				"single object where an array was expected",
+				"unknown",
+				"broker.Idp",
+			},
+		},
+		{
+			name:        "seq into non-array",
+			inputErr:    fmt.Errorf("line 5: cannot unmarshal !!seq into broker.NATS"),
+			wantChanged: true,
+			wantSubstrings: []string{
+				"array where a single object was expected",
+				"5",
+				"broker.NATS",
+			},
+		},
+		{
+			name:        "generic type mismatch",
+			inputErr:    fmt.Errorf("line 3: cannot unmarshal !!str into int"),
+			wantChanged: true,
+			wantSubstrings: []string{
+				"Type mismatch",
+				"str",
+				"int",
+				"3",
+			},
+		},
+		{
+			name:        "unmarshal but no regex match",
+			inputErr:    fmt.Errorf("unmarshal error: something weird"),
+			wantChanged: true,
+			wantSubstrings: []string{
+				"check your YAML syntax",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := improveYAMLErrorMessage(tt.inputErr)
+			if !tt.wantChanged {
+				assert.Equal(t, tt.inputErr, result)
+			} else {
+				assert.NotEqual(t, tt.inputErr.Error(), result.Error())
+				for _, sub := range tt.wantSubstrings {
+					assert.Contains(t, result.Error(), sub)
+				}
+			}
+		})
+	}
 }
 
 func TestGetConfig_ConcurrentAccess(t *testing.T) {

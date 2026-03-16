@@ -560,6 +560,9 @@ func mergeConfigurationFiles(files []string) (string, error) {
 	return string(mergedYAML), nil
 }
 
+// deepMerge recursively merges overlay into base. Maps are merged recursively,
+// arrays are concatenated (not replaced), and primitive values from overlay
+// take precedence over base.
 func deepMerge(base, overlay map[string]interface{}) map[string]interface{} {
 	result := make(map[string]interface{})
 

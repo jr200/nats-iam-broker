@@ -39,24 +39,27 @@ func NewIdpVerifiers(ctx *Context, config *Config) ([]IdpAndJwtVerifier, error) 
 	return idpVerifiers, nil
 }
 
-func runVerification(jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims, *IdpAndJwtVerifier, *oidc.IDToken, error) {
+func runVerification(ctx context.Context, jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims, *IdpAndJwtVerifier, *oidc.IDToken, error) {
+	var verificationErrors []error
 	for _, item := range items {
 		if item.verifier.ctx.Options.LogSensitive {
 			zap.L().Debug("verifying jwt against spec", zap.String("jwt", jwtToken), zap.Any("spec", item.config.ValidationSpec))
 		}
-		reqClaims, idToken, err := item.verifier.verifyJWT(jwtToken, item.config.CustomMapping)
+		reqClaims, idToken, err := item.verifier.verifyJWT(ctx, jwtToken, item.config.CustomMapping)
 		if err != nil {
+			verificationErrors = append(verificationErrors, fmt.Errorf("idp %s: %w", item.config.Description, err))
 			var expiredErr *oidc.TokenExpiredError
 			if errors.As(err, &expiredErr) {
 				zap.L().Debug("error verifying idp-jwt: token expired", zap.String("idp", item.config.Description), zap.Time("expiry", expiredErr.Expiry))
-				continue
+			} else {
+				zap.L().Debug("error verifying idp-jwt, trying next idp", zap.String("idp", item.config.Description), zap.Error(err))
 			}
-			zap.L().Debug("error verifying idp-jwt, trying next idp", zap.String("idp", item.config.Description), zap.Error(err))
 			continue
 		}
 
 		err = item.verifier.validateAgainstSpec(reqClaims, item.config.ValidationSpec)
 		if err != nil {
+			verificationErrors = append(verificationErrors, fmt.Errorf("idp %s validation: %w", item.config.Description, err))
 			zap.L().Debug("failed checks in idp validation", zap.Error(err))
 			continue
 		}
@@ -64,7 +67,10 @@ func runVerification(jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims,
 		return reqClaims, &item, idToken, nil
 	}
 
-	return nil, nil, nil, errors.New("no idp verifier found for jwtToken")
+	if len(verificationErrors) == 0 {
+		return nil, nil, nil, errors.New("no idp verifiers configured")
+	}
+	return nil, nil, nil, fmt.Errorf("no idp verifier matched token: %w", errors.Join(verificationErrors...))
 }
 
 type IdpJwtVerifier struct {
@@ -117,14 +123,14 @@ func NewJwtVerifier(ctx *Context, clientID string, issuerURL string, maxTokenLif
 
 // Verifies that the ID token was signed by idp and is valid.
 // Returns the claims embedded with the token
-func (v *IdpJwtVerifier) verifyJWT(token string, customMapping map[string]string) (*IdpJwtClaims, *oidc.IDToken, error) {
+func (v *IdpJwtVerifier) verifyJWT(ctx context.Context, token string, customMapping map[string]string) (*IdpJwtClaims, *oidc.IDToken, error) {
 	claims := &IdpJwtClaims{}
 
 	if v.ctx.Options.LogSensitive {
 		zap.L().Debug("VerifyJWT", zap.String("token", token))
 	}
 
-	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), oidcTimeout)
+	verifyCtx, verifyCancel := context.WithTimeout(ctx, oidcTimeout)
 	defer verifyCancel()
 
 	idToken, err := v.Verify(verifyCtx, token)

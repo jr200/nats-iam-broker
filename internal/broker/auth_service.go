@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -25,7 +26,7 @@ type AuthService struct {
 	metrics           *metrics.Metrics
 }
 
-type AuthHandler func(req *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error)
+type AuthHandler func(ctx context.Context, req *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error)
 
 func NewAuthService(ctx *Context, issuer nkeys.KeyPair, xkey nkeys.KeyPair, handler AuthHandler, m *metrics.Metrics) *AuthService {
 	return &AuthService{
@@ -119,7 +120,8 @@ func (a *AuthService) Handle(inRequest micro.Request) {
 
 	var sk nkeys.KeyPair
 	var accountInfo *UserAccountInfo
-	claims, sk, accountInfo, err := a.createNewClaimsFn(rc)
+	reqCtx := context.Background()
+	claims, sk, accountInfo, err := a.createNewClaimsFn(reqCtx, rc)
 	if err != nil {
 		a.Respond(inRequest, userNkey, serverID, "", err)
 		return

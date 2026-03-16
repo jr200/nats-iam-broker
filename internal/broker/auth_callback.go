@@ -19,17 +19,18 @@ func newAuthCallbackWithWatcher(
 	nc *nats.Conn,
 	watcher *ConfigWatcher,
 ) AuthHandler {
-	return func(request *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error) {
+	return func(reqCtx context.Context, request *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error) {
 		// Snapshot current state at request start. All operations in this
 		// request use this snapshot, ensuring consistency even if a reload
 		// happens mid-request.
 		state := watcher.State()
-		return handleAuthRequest(ctx, m, nc, state.config, state.configManager, state.idpVerifiers, state.auditSubject, request)
+		return handleAuthRequest(reqCtx, ctx, m, nc, state.config, state.configManager, state.idpVerifiers, state.auditSubject, request)
 	}
 }
 
 func handleAuthRequest(
-	ctx *Context,
+	reqCtx context.Context,
+	srvCtx *Context,
 	m *metrics.Metrics,
 	nc *nats.Conn,
 	config *Config,
@@ -52,13 +53,13 @@ func handleAuthRequest(
 		}
 	}
 
-	idpRawJwt, tokenReq := extractJWT(ctx, request)
+	idpRawJwt, tokenReq := extractJWT(srvCtx, request)
 	if idpRawJwt == "" {
 		recordResult(metrics.StatusError)
 		return nil, nil, nil, fmt.Errorf("no valid JWT token found in request")
 	}
 
-	reqClaims, matchedVerifier, _, err := verifyAndEnrich(m, idpRawJwt, tokenReq, idpVerifiers)
+	reqClaims, matchedVerifier, _, err := verifyAndEnrich(reqCtx, m, idpRawJwt, tokenReq, idpVerifiers)
 	if err != nil {
 		recordResult(metrics.StatusDenied)
 		return nil, nil, nil, err
@@ -70,11 +71,11 @@ func handleAuthRequest(
 	reqJwtClaims["also_known_as"] = request.ClientInformation.NameTag // Sentinel name
 	reqClaims.fromMap(reqJwtClaims, matchedVerifier.config.CustomMapping)
 
-	if ctx.Options.LogSensitive {
+	if srvCtx.Options.LogSensitive {
 		zap.L().Debug("reqClaims", zap.Any("claims", reqClaims.toMap()))
 	}
 
-	claims, signingKeyPair, userAccountInfo, resultStatus, err := buildUserClaims(ctx, config, configManager, reqClaims, matchedVerifier, request)
+	claims, signingKeyPair, userAccountInfo, resultStatus, err := buildUserClaims(srvCtx, config, configManager, reqClaims, matchedVerifier, request)
 	if err != nil {
 		recordResult(resultStatus)
 		return nil, nil, nil, err
@@ -116,13 +117,14 @@ func extractJWT(ctx *Context, request *jwt.AuthorizationRequestClaims) (string, 
 }
 
 func verifyAndEnrich(
+	ctx context.Context,
 	m *metrics.Metrics,
 	idpRawJwt string,
 	tokenReq TokenRequest,
 	idpVerifiers []IdpAndJwtVerifier,
 ) (*IdpJwtClaims, *IdpAndJwtVerifier, TokenRequest, error) {
 	verifyStart := time.Now()
-	reqClaims, matchedVerifier, verifiedIDToken, err := runVerification(idpRawJwt, idpVerifiers)
+	reqClaims, matchedVerifier, verifiedIDToken, err := runVerification(ctx, idpRawJwt, idpVerifiers)
 	if err != nil {
 		if m != nil {
 			m.IDPVerifyTotal.WithLabelValues("unknown", metrics.StatusError).Inc()
@@ -137,7 +139,7 @@ func verifyAndEnrich(
 
 	if matchedVerifier.config.UserInfo.Enabled {
 		if tokenReq.AccessToken != "" {
-			userInfoCtx, userInfoCancel := context.WithTimeout(context.Background(), oidcTimeout)
+			userInfoCtx, userInfoCancel := context.WithTimeout(ctx, oidcTimeout)
 			defer userInfoCancel()
 			userInfo, err := matchedVerifier.verifier.GetUserInfo(userInfoCtx, tokenReq.AccessToken, verifiedIDToken)
 			if err != nil {
