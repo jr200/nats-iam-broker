@@ -503,10 +503,11 @@ nats-iam-broker -metrics -metrics-port 8080 config.yaml
 
 ### Endpoints
 
-| Path       | Description                        |
-| ---------- | ---------------------------------- |
-| `/metrics` | Prometheus metrics scrape endpoint |
-| `/healthz` | Health check (returns `200 OK`)    |
+| Path       | Description                                                                                          |
+| ---------- | ---------------------------------------------------------------------------------------------------- |
+| `/metrics` | Prometheus metrics scrape endpoint                                                                   |
+| `/healthz` | Liveness check — returns `200` if the process is alive and NATS is connected, `503` otherwise        |
+| `/readyz`  | Readiness check — returns `200` when NATS is connected, IDP verifiers are ready, and the micro service is registered. Returns `503` with per-check details otherwise |
 
 ### Available Metrics
 

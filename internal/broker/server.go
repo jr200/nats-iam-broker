@@ -30,9 +30,11 @@ func Start(configFiles []string, serverOpts *Options) error {
 
 	// Start metrics server if enabled
 	var m *metrics.Metrics
+	var health *metrics.HealthChecker
 	if serverOpts.MetricsEnabled {
 		m = metrics.New()
-		metricsServer := metrics.NewServer(serverOpts.MetricsPort)
+		health = metrics.NewHealthChecker()
+		metricsServer := metrics.NewServer(serverOpts.MetricsPort, health)
 		metricsServer.Start()
 		defer metricsServer.Stop()
 	}
@@ -43,6 +45,9 @@ func Start(configFiles []string, serverOpts *Options) error {
 		nats.Name(config.Service.Name),
 		nats.MaxReconnects(-1),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
+			if health != nil {
+				health.SetNATSConnected(false)
+			}
 			if err != nil {
 				zap.L().Error("NATS disconnected", zap.Error(err))
 			} else {
@@ -50,9 +55,15 @@ func Start(configFiles []string, serverOpts *Options) error {
 			}
 		}),
 		nats.ReconnectHandler(func(nc *nats.Conn) {
+			if health != nil {
+				health.SetNATSConnected(true)
+			}
 			zap.L().Info("NATS reconnected", zap.String("addr", nc.ConnectedAddr()))
 		}),
 		nats.ClosedHandler(func(_ *nats.Conn) {
+			if health != nil {
+				health.SetNATSConnected(false)
+			}
 			zap.L().Info("NATS connection closed")
 		}),
 		nats.ErrorHandler(func(_ *nats.Conn, sub *nats.Subscription, err error) {
@@ -81,9 +92,17 @@ func Start(configFiles []string, serverOpts *Options) error {
 
 	defer natsDrainConnection(nc)
 
+	if health != nil {
+		health.SetNATSConn(nc)
+	}
+
 	idpVerifiers, err := NewIdpVerifiers(ctx, config)
 	if err != nil {
 		return err
+	}
+
+	if health != nil {
+		health.SetIDPVerifiersReady(len(idpVerifiers) > 0)
 	}
 
 	auditEventSubject := config.Service.Name + ".evt.audit.account.%s.user.%s.created"
@@ -123,6 +142,10 @@ func Start(configFiles []string, serverOpts *Options) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	if health != nil {
+		health.SetServiceRegistered(true)
 	}
 
 	zap.L().Info("listening for auth requests", zap.String("subject", "$SYS.REQ.USER.AUTH"), zap.String("addr", nc.ConnectedAddr()))

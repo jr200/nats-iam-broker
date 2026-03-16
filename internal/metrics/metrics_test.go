@@ -43,7 +43,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestNewServer(t *testing.T) {
-	s := NewServer(0) // port 0 for testing
+	s := NewServer(0, nil) // port 0 for testing
 	require.NotNil(t, s)
 	assert.NotNil(t, s.httpServer)
 }
@@ -64,7 +64,7 @@ func TestServerHealthz(t *testing.T) {
 }
 
 func TestServerStartStop(_ *testing.T) {
-	s := NewServer(0)
+	s := NewServer(0, nil)
 	s.Start()
 	s.Stop()
 	// No panic or error means success

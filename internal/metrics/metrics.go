@@ -139,13 +139,21 @@ const (
 )
 
 // NewServer creates a new metrics HTTP server on the given port.
-func NewServer(port int) *Server {
+// If a HealthChecker is provided, /healthz and /readyz use it for
+// real liveness and readiness checks; otherwise /healthz returns "ok".
+func NewServer(port int, health *HealthChecker) *Server {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
+
+	if health != nil {
+		mux.HandleFunc("/healthz", health.LivenessHandler())
+		mux.HandleFunc("/readyz", health.ReadinessHandler())
+	} else {
+		mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		})
+	}
 
 	return &Server{
 		httpServer: &http.Server{

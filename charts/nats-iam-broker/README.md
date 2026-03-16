@@ -79,3 +79,27 @@ The following table lists the configurable parameters of the `nats-iam-broker` c
 | `metrics.serviceMonitor.labels`                           | Additional labels for the ServiceMonitor                                                  | `{}`                              |
 
 For a complete list of configuration options, see the `values.yaml` file.
+
+## Health and Readiness Probes
+
+When `metrics.enabled` is `true`, the broker exposes health endpoints on the metrics port. The Helm chart configures Kubernetes probes automatically:
+
+| Probe     | Path       | Description                                                                                         |
+| --------- | ---------- | --------------------------------------------------------------------------------------------------- |
+| Liveness  | `/healthz` | Returns `200` if the process is alive and the NATS connection is active. Kubernetes restarts the pod on failure. |
+| Readiness | `/readyz`  | Returns `200` when NATS is connected, at least one IDP verifier is ready, and the micro service endpoint is registered. Kubernetes removes the pod from service endpoints on failure. |
+
+Both endpoints return JSON with a `status` field (`"ok"` or `"unavailable"`). The `/readyz` endpoint also includes a `checks` object with individual component status:
+
+```json
+{
+  "status": "unavailable",
+  "checks": {
+    "nats": "disconnected",
+    "idp_verifiers": "ready",
+    "service": "registered"
+  }
+}
+```
+
+NATS disconnect/reconnect events automatically flip the readiness state, so a temporary NATS outage will remove the pod from service until the connection recovers.
