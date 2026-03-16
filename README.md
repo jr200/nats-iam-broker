@@ -456,6 +456,38 @@ Notice that:
 - `https://mycompany.com/claims/access_level` and `https://mycompany.com/claims/custom_field` retain their original names because they weren't explicitly mapped
 - The mapped claims (`department`, `employee_id`, `roles`, `groups`) use their standardized names
 
+## Hot-Reload Configuration
+
+The broker supports hot-reloading configuration files without restarting. When enabled, the broker watches config files for changes and atomically swaps to the new configuration. In-flight auth requests complete with the previous config while new requests use the updated config.
+
+Enable with the `--watch` flag:
+
+```bash
+nats-iam-broker --watch config.yaml
+```
+
+| Flag      | Default | Description                                          |
+| --------- | ------- | ---------------------------------------------------- |
+| `--watch` | `false` | Enable hot-reload of config files via file watching   |
+
+### What gets reloaded
+
+- IDP configuration (add/remove/modify identity providers)
+- RBAC role bindings and roles
+- Template expressions and custom claim mappings
+- Token expiry bounds
+
+### What requires a restart
+
+- `service.creds_file` and `service.account.signing_nkey` (NATS connection identity). If these change, a warning is logged.
+- NATS server URL changes
+
+### Behavior
+
+- **Debounced**: Rapid file changes (e.g., editor save) are debounced (500ms) into a single reload.
+- **Validated**: The new config is fully validated before swapping. Invalid configs are rejected and the previous config remains active.
+- **Kubernetes-friendly**: Watches parent directories to handle ConfigMap symlink rotations.
+
 ## Prometheus Metrics
 
 The broker can expose Prometheus metrics via an HTTP endpoint. Enable with the `-metrics` flag:

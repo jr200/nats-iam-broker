@@ -14,8 +14,7 @@ import (
 
 func Start(configFiles []string, serverOpts *Options) error {
 	ctx := NewServerContext(serverOpts)
-	// This is reads the config from disk on server start. Downside with caching is that if the config
-	// is updated, the service will not pick it up until the service is restarted.
+
 	configManager, err := NewConfigManager(configFiles)
 	if err != nil {
 		return fmt.Errorf("failed to initialize config manager: %v", err)
@@ -91,7 +90,24 @@ func Start(configFiles []string, serverOpts *Options) error {
 	//nolint:mnd // 2 is the number of %s placeholders in auditEventSubject
 	zap.L().Info("audit events configured", zap.String("subject_pattern", strings.Replace(auditEventSubject, "%s", "*", 2)))
 
-	authCallback := newAuthCallback(ctx, m, nc, config, configManager, idpVerifiers, auditEventSubject)
+	// Build initial live state and config watcher
+	initial := &liveState{
+		config:        config,
+		configManager: configManager,
+		idpVerifiers:  idpVerifiers,
+		auditSubject:  auditEventSubject,
+	}
+	watcher := NewConfigWatcher(ctx, configFiles, initial)
+
+	if serverOpts.WatchConfig {
+		if err := watcher.Start(); err != nil {
+			zap.L().Warn("failed to start config watcher, continuing without hot-reload", zap.Error(err))
+		} else {
+			defer watcher.Stop()
+		}
+	}
+
+	authCallback := newAuthCallbackWithWatcher(ctx, m, nc, watcher)
 	auth := NewAuthService(ctx, config.Service.Account.SigningNKey.KeyPair, config.serviceEncryptionXkey(), authCallback, m)
 
 	zap.L().Info("starting service", zap.String("version", config.Service.Version))

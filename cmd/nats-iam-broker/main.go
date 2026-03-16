@@ -40,6 +40,7 @@ func parseFlags() []string {
 	flag.BoolVar(&serverOpts.LogSensitive, "log-sensitive", false, "enable sensitive logging (for debugging)")
 	flag.BoolVar(&serverOpts.MetricsEnabled, "metrics", false, "enable Prometheus metrics endpoint")
 	flag.IntVar(&serverOpts.MetricsPort, "metrics-port", broker.DefaultMetricsPort, "port for the metrics HTTP server")
+	flag.BoolVar(&serverOpts.WatchConfig, "watch", false, "enable hot-reload of config files via file watching")
 	flag.Parse()
 
 	configFiles := flag.Args()

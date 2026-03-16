@@ -45,6 +45,9 @@ spec:
 {{- if not .Values.logging.json }}
             - -log-human
 {{- end }}
+{{- if .Values.watch.enabled }}
+            - -watch
+{{- end }}
 {{- if .Values.metrics.enabled }}
             - -metrics
             - -metrics-port={{ .Values.metrics.port }}

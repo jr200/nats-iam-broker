@@ -63,7 +63,7 @@ func TestServerHealthz(t *testing.T) {
 	assert.Equal(t, "ok", w.Body.String())
 }
 
-func TestServerStartStop(t *testing.T) {
+func TestServerStartStop(_ *testing.T) {
 	s := NewServer(0)
 	s.Start()
 	s.Stop()

@@ -2,7 +2,6 @@ package internal
 
 import (
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -63,5 +62,5 @@ func TestParseDelimiters(t *testing.T) {
 	// Note: ParseDelimiters calls os.Exit(1) on invalid input, which can't be
 	// easily tested without refactoring. The valid cases above confirm the
 	// happy path works correctly.
-	_ = fmt.Sprintf("suppressing unused import")
+	_ = "suppressing unused import"
 }

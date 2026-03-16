@@ -26,6 +26,9 @@ logging:
   json: false # Set to true to enable JSON logging
   level: info # Set logging level: error, warn, info, debug, trace
 
+watch:
+  enabled: false # Set to true to enable hot-reload of config files via file watching
+
 metrics:
   enabled: false # Set to true to enable Prometheus metrics endpoint
   port: 8080 # Port for the metrics HTTP server

@@ -6,6 +6,29 @@ Standard go templating is used to construct roles dynamically. Templating functi
 
 The configuration structure is outlined below.
 
+## Hot-Reload {#sec-hot-reload}
+
+The broker supports hot-reloading configuration files without restarting. When enabled with the `--watch` flag, the broker watches config files for changes and atomically swaps to the new configuration.
+
+```bash
+nats-iam-broker --watch config.yaml
+```
+
+| Flag      | Default | Description                                          |
+| --------- | ------- | ---------------------------------------------------- |
+| `--watch` | `false` | Enable hot-reload of config files via file watching   |
+
+**What gets reloaded:** IDP configuration, RBAC role bindings and roles, template expressions, custom claim mappings, and token expiry bounds.
+
+**What requires a restart:** `service.creds_file` and `service.account.signing_nkey` (NATS connection identity). A warning is logged if these change.
+
+**Behavior:**
+
+- **Debounced** — rapid file changes (e.g., editor save) are coalesced into a single reload (500ms window).
+- **Validated** — the new config is fully parsed and validated before swapping. Invalid configs are rejected and the previous config remains active.
+- **Kubernetes-friendly** — watches parent directories to handle ConfigMap symlink rotations.
+- **Thread-safe** — in-flight auth requests complete with the previous config; new requests use the updated config.
+
 ## Service Configuration
 
 | Key | Type | Description |

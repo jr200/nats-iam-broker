@@ -13,7 +13,22 @@ import (
 	"go.uber.org/zap"
 )
 
-func newAuthCallback(
+func newAuthCallbackWithWatcher(
+	ctx *Context,
+	m *metrics.Metrics,
+	nc *nats.Conn,
+	watcher *ConfigWatcher,
+) AuthHandler {
+	return func(request *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error) {
+		// Snapshot current state at request start. All operations in this
+		// request use this snapshot, ensuring consistency even if a reload
+		// happens mid-request.
+		state := watcher.State()
+		return handleAuthRequest(ctx, m, nc, state.config, state.configManager, state.idpVerifiers, state.auditSubject, request)
+	}
+}
+
+func handleAuthRequest(
 	ctx *Context,
 	m *metrics.Metrics,
 	nc *nats.Conn,
@@ -21,59 +36,58 @@ func newAuthCallback(
 	configManager *ConfigManager,
 	idpVerifiers []IdpAndJwtVerifier,
 	auditEventSubject string,
-) AuthHandler {
-	return func(request *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error) {
-		requestStart := time.Now()
-		if m != nil {
-			m.AuthRequestsInFlight.Inc()
-			defer m.AuthRequestsInFlight.Dec()
-		}
-
-		recordResult := func(status string) {
-			if m != nil {
-				duration := time.Since(requestStart).Seconds()
-				m.AuthRequestsTotal.WithLabelValues(status).Inc()
-				m.AuthRequestDuration.WithLabelValues(status).Observe(duration)
-			}
-		}
-
-		idpRawJwt, tokenReq := extractJWT(ctx, request)
-		if idpRawJwt == "" {
-			recordResult(metrics.StatusError)
-			return nil, nil, nil, fmt.Errorf("no valid JWT token found in request")
-		}
-
-		reqClaims, matchedVerifier, _, err := verifyAndEnrich(m, idpRawJwt, tokenReq, idpVerifiers)
-		if err != nil {
-			recordResult(metrics.StatusDenied)
-			return nil, nil, nil, err
-		}
-
-		// Merge in client information from the request
-		reqJwtClaims := reqClaims.toMap()
-		reqJwtClaims["client_id"] = request.ClientInformation.User        // Sentinel ID
-		reqJwtClaims["also_known_as"] = request.ClientInformation.NameTag // Sentinel name
-		reqClaims.fromMap(reqJwtClaims, matchedVerifier.config.CustomMapping)
-
-		if ctx.Options.LogSensitive {
-			zap.L().Debug("reqClaims", zap.Any("claims", reqClaims.toMap()))
-		}
-
-		claims, signingKeyPair, userAccountInfo, resultStatus, err := buildUserClaims(ctx, config, configManager, reqClaims, matchedVerifier, request)
-		if err != nil {
-			recordResult(resultStatus)
-			return nil, nil, nil, err
-		}
-
-		publishAuditEvent(nc, auditEventSubject, config, claims, request, reqClaims, matchedVerifier, userAccountInfo)
-
-		recordResult(metrics.StatusSuccess)
-		if m != nil {
-			m.TokensMinted.WithLabelValues(claims.Audience, matchedVerifier.config.Description).Inc()
-		}
-
-		return claims, signingKeyPair, userAccountInfo, nil
+	request *jwt.AuthorizationRequestClaims,
+) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error) {
+	requestStart := time.Now()
+	if m != nil {
+		m.AuthRequestsInFlight.Inc()
+		defer m.AuthRequestsInFlight.Dec()
 	}
+
+	recordResult := func(status string) {
+		if m != nil {
+			duration := time.Since(requestStart).Seconds()
+			m.AuthRequestsTotal.WithLabelValues(status).Inc()
+			m.AuthRequestDuration.WithLabelValues(status).Observe(duration)
+		}
+	}
+
+	idpRawJwt, tokenReq := extractJWT(ctx, request)
+	if idpRawJwt == "" {
+		recordResult(metrics.StatusError)
+		return nil, nil, nil, fmt.Errorf("no valid JWT token found in request")
+	}
+
+	reqClaims, matchedVerifier, _, err := verifyAndEnrich(m, idpRawJwt, tokenReq, idpVerifiers)
+	if err != nil {
+		recordResult(metrics.StatusDenied)
+		return nil, nil, nil, err
+	}
+
+	// Merge in client information from the request
+	reqJwtClaims := reqClaims.toMap()
+	reqJwtClaims["client_id"] = request.ClientInformation.User        // Sentinel ID
+	reqJwtClaims["also_known_as"] = request.ClientInformation.NameTag // Sentinel name
+	reqClaims.fromMap(reqJwtClaims, matchedVerifier.config.CustomMapping)
+
+	if ctx.Options.LogSensitive {
+		zap.L().Debug("reqClaims", zap.Any("claims", reqClaims.toMap()))
+	}
+
+	claims, signingKeyPair, userAccountInfo, resultStatus, err := buildUserClaims(ctx, config, configManager, reqClaims, matchedVerifier, request)
+	if err != nil {
+		recordResult(resultStatus)
+		return nil, nil, nil, err
+	}
+
+	publishAuditEvent(nc, auditEventSubject, config, claims, request, reqClaims, matchedVerifier, userAccountInfo)
+
+	recordResult(metrics.StatusSuccess)
+	if m != nil {
+		m.TokensMinted.WithLabelValues(claims.Audience, matchedVerifier.config.Description).Inc()
+	}
+
+	return claims, signingKeyPair, userAccountInfo, nil
 }
 
 func extractJWT(ctx *Context, request *jwt.AuthorizationRequestClaims) (string, TokenRequest) {

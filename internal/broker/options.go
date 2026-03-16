@@ -12,6 +12,9 @@ type Options struct {
 
 	// MetricsPort is the port for the metrics HTTP server
 	MetricsPort int
+
+	// WatchConfig enables hot-reload of configuration files via filesystem watching
+	WatchConfig bool
 }
 
 // Context holds both server options and other server state
