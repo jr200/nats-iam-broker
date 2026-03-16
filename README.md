@@ -201,7 +201,176 @@ The configuration structure is outlined here.
 | `rbac.role_binding[i].match[j].claim`    | `string`                                                                | Name of an IdP JWT claim to match on (e.g., "email", "groups"). Required if `permission` is not set.    |
 | `rbac.role_binding[i].match[j].value`    | `string`                                                                | The value the corresponding IdP JWT claim must have. Required if `claim` is set.                         |
 | `rbac.role_binding[i].match[j].permission` | `string`                                                                | A permission string required in the IdP JWT's `permissions` claim. Required if `claim` is not set.         |
-| `rbac.role_binding_matching_strategy`    | `string`                                                                | Strategy for selecting a role binding when multiple could match. Can be `strict` or `best_match`. Defaults to `best_match`. `strict`: Requires *all* `match` criteria in a binding to be met. The first fully matching binding is used. `best_match`: Selects the binding with the *most* matching criteria. In case of a tie in the number of matches, the binding with more criteria overall is chosen. If still tied, the first encountered binding wins. |
+| `rbac.role_binding[i].match[j].expr`     | `string`                                                                | A boolean expression evaluated against all available claims using [expr-lang/expr](https://github.com/expr-lang/expr). See [Role Binding & Matching](#role-binding--matching). |
+| `rbac.role_binding[i].token_max_expiration` | `duration`                                                            | Override token max expiry for this binding. Overrides `rbac.token_max_expiration`.                        |
+| `rbac.role_binding_matching_strategy`    | `string`                                                                | Strategy for selecting a role binding when multiple could match. Can be `strict` or `best_match`. Defaults to `best_match`. See [Matching Strategies](#matching-strategies). |
+| `idp.user_info.enabled`                 | `bool`                                                                  | If `true`, fetches additional claims from the OIDC UserInfo endpoint and merges them into the matching context. Requires the client to provide an `access_token`. |
+
+## Available JWT Claims for Matching
+
+When a user connects, the broker builds a context map from the validated IdP JWT token. This context is used for role binding evaluation, template rendering, and expression matching. The following fields may be present:
+
+### Standard OIDC Claims
+
+These are extracted from the IdP JWT token automatically:
+
+| Claim Key              | Type               | Description                      |
+| ---------------------- | ------------------ | -------------------------------- |
+| `name`                 | string             | Full name                        |
+| `given_name`           | string             | Given/first name                 |
+| `family_name`          | string             | Family/last name                 |
+| `preferred_username`   | string             | Preferred username               |
+| `nickname`             | string             | Nickname                         |
+| `email`                | string             | Email address                    |
+| `email_verified`       | bool               | Whether email is verified        |
+| `picture`              | string             | Profile picture URL              |
+| `gender`               | string             | Gender                           |
+| `zoneinfo`             | string             | Time zone info                   |
+| `locale`               | string             | Locale                           |
+| `sub`                  | string             | Subject identifier (unique user ID) |
+| `aud`                  | []string           | Audience (normalized to array)   |
+| `exp`                  | int64              | Expiry timestamp (unix)          |
+| `iat`                  | int64              | Issued-at timestamp (unix)       |
+| `nbf`                  | int64              | Not-before timestamp (unix)      |
+| `jti`                  | string             | JWT ID                           |
+| `at_hash`              | string             | Access token hash                |
+| `groups`               | string or []string | Group memberships                |
+| `roles`                | string or []string | Role assignments                 |
+
+### Broker-Injected Fields
+
+These are added by the broker from the NATS authorization request:
+
+| Claim Key         | Description                                              |
+| ----------------- | -------------------------------------------------------- |
+| `client_id`       | NATS client sentinel ID (`ClientInformation.User`)       |
+| `also_known_as`   | NATS client sentinel name (`ClientInformation.NameTag`)  |
+
+### Custom Claims
+
+Any claim in the IdP JWT that is not in the standard list above is available in the context under its original key name. If `custom_mapping` is configured on the IDP, the claim is available under the mapped key instead. See [Custom Claim Mapping](#custom-claim-mapping).
+
+### UserInfo Claims
+
+When `idp.user_info.enabled` is `true` and the client provides an `access_token`, the broker calls the OIDC UserInfo endpoint and merges all returned fields into the context. The available fields are provider-dependent but commonly include `phone_number`, `address`, and additional profile data.
+
+## Role Binding & Matching
+
+Role bindings determine which NATS account, roles, permissions, and limits are assigned to a user based on the claims in their IdP JWT. Each role binding specifies a set of `match` criteria and the resulting `user_account` and `roles`.
+
+### Match Types
+
+There are three types of match criteria. Each `match` entry should use exactly one of these:
+
+#### 1. Claim-Based Matching (`claim` + `value`)
+
+Matches a specific claim key against an expected value. Supports:
+- **String equality**: the claim value equals the match value
+- **Array membership**: the match value is found in a claim that is an array
+- **Map key existence**: the match value exists as a key in a claim that is a map
+
+```yaml
+role_binding:
+  - user_account: APP1
+    match:
+      - { claim: email, value: "admin@example.com" }
+      - { claim: groups, value: "developers" }
+    roles:
+      - admin-role
+```
+
+#### 2. Permission-Based Matching (`permission`)
+
+Checks if a specific string exists in the JWT's `permissions` field (which can be a string or an array of strings):
+
+```yaml
+role_binding:
+  - user_account: APP1
+    match:
+      - { permission: "nats:account:admin" }
+    roles:
+      - admin-role
+```
+
+#### 3. Expression-Based Matching (`expr`)
+
+Uses [expr-lang/expr](https://github.com/expr-lang/expr) to evaluate a boolean expression against the full claims context. This is the most flexible match type and supports complex logic:
+
+```yaml
+role_binding:
+  - user_account: APP1
+    match:
+      - expr: 'email endsWith "@example.com" && "admin" in groups'
+    roles:
+      - admin-role
+
+  - user_account: APP2
+    match:
+      - expr: 'preferred_username == "service-bot" || client_id == "NATS_SERVICE_KEY"'
+    roles:
+      - service-role
+```
+
+Common expr-lang operators and functions:
+- `==`, `!=`, `>`, `<`, `>=`, `<=` - comparison
+- `&&`, `||`, `!` - logical
+- `in` - membership (e.g., `"admin" in groups`)
+- `contains` - substring or element check (e.g., `email contains "@example.com"`)
+- `startsWith`, `endsWith` - string prefix/suffix
+- `matches` - regex matching (e.g., `email matches ".*@example\\.(com|org)"`)
+
+All claims listed in [Available JWT Claims for Matching](#available-jwt-claims-for-matching) are accessible by name in expressions.
+
+#### Combining Match Types
+
+Match criteria can be combined within a single binding. All match types can be mixed freely:
+
+```yaml
+role_binding:
+  - user_account: APP1
+    match:
+      - { claim: aud, value: "my-app" }
+      - { permission: "nats:write" }
+      - expr: '"engineering" in groups'
+    roles:
+      - full-access
+```
+
+### Matching Strategies
+
+The `role_binding_matching_strategy` setting controls how the broker selects a binding when multiple could match:
+
+**`best_match`** (default):
+- Evaluates all criteria across all bindings
+- Selects the binding with the **most** matched criteria
+- On a tie, prefers the binding with more total criteria (more specific)
+- On a further tie, the first binding in config order wins
+
+**`strict`**:
+- Requires **all** match criteria in a binding to succeed
+- The **first** fully matching binding is selected
+- Bindings with any failed criterion are skipped entirely
+
+### Fallback Bindings
+
+A role binding with an empty `match` list acts as a fallback. It is used only when no other binding matches:
+
+```yaml
+role_binding:
+  # Specific binding
+  - user_account: ADMIN_ACCOUNT
+    match:
+      - { claim: email, value: "admin@example.com" }
+    roles:
+      - admin-role
+
+  # Fallback for all other authenticated users
+  - user_account: DEFAULT_ACCOUNT
+    roles:
+      - read-only
+```
+
+Only the **first** fallback binding in config order is used if multiple are defined.
 
 ## Custom Claim Mapping
 
