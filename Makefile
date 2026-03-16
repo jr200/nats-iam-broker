@@ -137,14 +137,14 @@ clean:
 ################################################################################
 .PHONY: docs-preview
 docs-preview:
-	cd docs/site && quarto preview
+	cd docs/site && uv run quarto preview
 
 ################################################################################
 # Target: docs-render                                                          #
 ################################################################################
 .PHONY: docs-render
 docs-render:
-	cd docs/site && quarto render
+	cd docs/site && uv run quarto render
 
 ################################################################################
 # Target: docker-offical-build                                                 #

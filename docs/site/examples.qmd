@@ -22,7 +22,7 @@ Assuming docker is installed, the examples can be run using: `make example-<exam
 
 The `RGB.org` organisation has three departments that share a single NATS deployment. A department consists of several teams, with each team developing a set of applications.
 
-![RGB.org Organisation and Account Structure](../example_rgb_org_oac.svg)
+![RGB.org Organisation and Account Structure](images/example_rgb_org_oac.svg)
 
 The blue department has this setup:
 
@@ -37,7 +37,7 @@ The blue department has this setup:
 
 Bob is a member of `App Team 3`, and wishes to use their in-house app `demo-app`. This section describes the authentication and authorization flow.
 
-![RGB.org Auth Callout Flow](../example_rgb_org_flow.svg)
+![RGB.org Auth Callout Flow](images/example_rgb_org_flow.svg)
 
 1. Bob launches `demo-app`.
    - `demo-app` directs him to `OIDC Provider2` for authentication, which Bob completes.
