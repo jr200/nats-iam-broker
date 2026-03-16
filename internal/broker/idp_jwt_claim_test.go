@@ -7,6 +7,59 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestJwtClaimAudience_UnmarshalJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected JwtClaimAudience
+		wantErr  bool
+	}{
+		{
+			name:     "single string audience",
+			input:    `"my-audience"`,
+			expected: JwtClaimAudience{"my-audience"},
+		},
+		{
+			name:     "array of strings",
+			input:    `["aud1", "aud2", "aud3"]`,
+			expected: JwtClaimAudience{"aud1", "aud2", "aud3"},
+		},
+		{
+			name:     "empty string",
+			input:    `""`,
+			expected: JwtClaimAudience{""},
+		},
+		{
+			name:     "empty array",
+			input:    `[]`,
+			expected: JwtClaimAudience{},
+		},
+		{
+			name:    "invalid JSON (number)",
+			input:   `123`,
+			wantErr: true,
+		},
+		{
+			name:    "invalid JSON (object)",
+			input:   `{"key": "value"}`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var aud JwtClaimAudience
+			err := aud.UnmarshalJSON([]byte(tt.input))
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, aud)
+			}
+		})
+	}
+}
+
 func TestIdpJwtClaims_Permissions(t *testing.T) {
 	tests := []struct {
 		name               string
