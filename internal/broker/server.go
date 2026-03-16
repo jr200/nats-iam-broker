@@ -30,6 +30,13 @@ func Start(configFiles []string, cliOpts *Options, cliFlags map[string]bool) err
 
 	zap.ReplaceGlobals(zap.L().Named(config.Service.Name))
 
+	// Log available RBAC account names
+	accountNames := make([]string, len(config.Rbac.Accounts))
+	for i, acct := range config.Rbac.Accounts {
+		accountNames[i] = acct.Name
+	}
+	zap.L().Info("available RBAC accounts", zap.Strings("accounts", accountNames))
+
 	// Start metrics server if enabled
 	var m *metrics.Metrics
 	var health *metrics.HealthChecker
