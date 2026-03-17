@@ -1,4 +1,4 @@
-package server
+package broker
 
 import (
 	"testing"
@@ -6,6 +6,59 @@ import (
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestJwtClaimAudience_UnmarshalJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected JwtClaimAudience
+		wantErr  bool
+	}{
+		{
+			name:     "single string audience",
+			input:    `"my-audience"`,
+			expected: JwtClaimAudience{"my-audience"},
+		},
+		{
+			name:     "array of strings",
+			input:    `["aud1", "aud2", "aud3"]`,
+			expected: JwtClaimAudience{"aud1", "aud2", "aud3"},
+		},
+		{
+			name:     "empty string",
+			input:    `""`,
+			expected: JwtClaimAudience{""},
+		},
+		{
+			name:     "empty array",
+			input:    `[]`,
+			expected: JwtClaimAudience{},
+		},
+		{
+			name:    "invalid JSON (number)",
+			input:   `123`,
+			wantErr: true,
+		},
+		{
+			name:    "invalid JSON (object)",
+			input:   `{"key": "value"}`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var aud JwtClaimAudience
+			err := aud.UnmarshalJSON([]byte(tt.input))
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, aud)
+			}
+		})
+	}
+}
 
 func TestIdpJwtClaims_Permissions(t *testing.T) {
 	tests := []struct {
@@ -470,6 +523,64 @@ func TestIdpJwtClaims_CustomClaims(t *testing.T) {
 						assert.Equal(t, tt.claims[claimName], claimsMap[claimName], "Unmapped claim %s should retain original value", claimName)
 					}
 				}
+			}
+		})
+	}
+}
+
+func TestIdpJwtClaims_GroupsRolesArrayRoundtrip(t *testing.T) {
+	tests := []struct {
+		name           string
+		claims         map[string]interface{}
+		expectedGroups interface{}
+		expectedRoles  interface{}
+	}{
+		{
+			name: "groups as array of interfaces",
+			claims: map[string]interface{}{
+				"groups": []interface{}{"superuser", "admin"},
+				"roles":  []interface{}{"editor", "viewer"},
+			},
+			expectedGroups: []interface{}{"superuser", "admin"},
+			expectedRoles:  []interface{}{"editor", "viewer"},
+		},
+		{
+			name: "groups as single string",
+			claims: map[string]interface{}{
+				"groups": "superuser",
+				"roles":  "editor",
+			},
+			expectedGroups: "superuser",
+			expectedRoles:  "editor",
+		},
+		{
+			name: "groups as array of strings preserved in struct",
+			claims: map[string]interface{}{
+				"groups": []string{"superuser", "admin"},
+			},
+			expectedGroups: []string{"superuser", "admin"},
+			expectedRoles:  nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			claims := &IdpJwtClaims{}
+			claims.fromMap(tt.claims, nil)
+
+			// Verify the struct fields preserve the original type
+			assert.Equal(t, tt.expectedGroups, claims.Groups)
+			assert.Equal(t, tt.expectedRoles, claims.Roles)
+
+			// Verify roundtrip through toMap() preserves values
+			// Note: JSON marshal/unmarshal converts []string to []interface{},
+			// so we check values exist rather than exact type equality
+			result := claims.toMap()
+			if tt.expectedGroups != nil {
+				assert.NotNil(t, result["groups"])
+			}
+			if tt.expectedRoles != nil {
+				assert.NotNil(t, result["roles"])
 			}
 		})
 	}

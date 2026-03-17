@@ -61,29 +61,3 @@ Create the name of the service account to use
 {{- end }}
 {{- end }}
 
-{{/*
-------------------------------------------------------------------------------
-Additional helper functions
-------------------------------------------------------------------------------
-*/}}
-{{- define "secretValue" -}}
-{{- $type := index . 0 -}}
-{{- $x := index . 1 -}}
-{{ if eq $type "env" -}}
-<<< env ${{ $x }} >>>
-{{- else if eq $type "file" -}}
-<<< readFile {{ $x | quote }} >>>
-{{- else -}}
-{{ $x }}
-{{- end }}
-{{- end }}
-
-{{- define "getImageTag" -}}
-  {{- $semverRegex := `^[0-9]+\.[0-9]+\.[0-9]+$` -}}
-  {{- $imageTag := .Values.image.tag | default .Chart.AppVersion | trimPrefix "v" -}}
-  {{- if regexMatch $semverRegex $imageTag -}}
-    {{- $imageTag -}}
-  {{- else -}}
-    {{- .Chart.AppVersion | trimPrefix "v" -}}
-  {{- end -}}
-{{- end -}}

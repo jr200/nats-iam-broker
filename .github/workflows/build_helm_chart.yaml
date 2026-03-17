@@ -40,14 +40,3 @@ jobs:
     secrets:
       charts_write_token: ${{ secrets.CHARTS_WRITE_TOKEN }}
 
-  spawn-workflow:
-    needs: main
-    runs-on: ubuntu-latest
-    steps:
-      - name: dispatch-next-workflow
-        uses: peter-evans/repository-dispatch@v3
-        if: github.event_name != 'workflow_dispatch'
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          event-type: dispatch-publish-release
-          client-payload: ${{ toJson(github.event.client_payload) }}

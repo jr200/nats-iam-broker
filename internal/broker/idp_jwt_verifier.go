@@ -1,4 +1,4 @@
-package server
+package broker
 
 import (
 	"context"
@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/rs/zerolog/log"
+	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 )
 
 type UserInfoProvider interface {
-	GetUserInfo(ctx context.Context, token string) (map[string]interface{}, error)
+	GetUserInfo(ctx context.Context, accessToken string, idToken *oidc.IDToken) (map[string]interface{}, error)
 }
 
 type IdpAndJwtVerifier struct {
@@ -24,14 +24,14 @@ func NewIdpVerifiers(ctx *Context, config *Config) ([]IdpAndJwtVerifier, error) 
 	idpVerifiers := make([]IdpAndJwtVerifier, 0, len(config.Idp))
 	for i := range config.Idp {
 		idp := &config.Idp[i] // Use a pointer to the IDP config
-		idpVerifier, err := NewJwtVerifier(ctx, idp.ClientID, idp.IssuerURL)
+		idpVerifier, err := NewJwtVerifier(ctx, idp.ClientID, idp.IssuerURL, idp.MaxTokenLifetime.Duration, idp.ClockSkew.Duration)
 		if err != nil {
 			if idp.IgnoreSetupError {
-				log.Warn().Err(err).Str("issuer_url", idp.IssuerURL).Str("client_id", idp.ClientID).Msg("Failed to setup IDP verifier, ignoring due to config")
+				zap.L().Warn("Failed to setup IDP verifier, ignoring due to config", zap.Error(err), zap.String("issuer_url", idp.IssuerURL), zap.String("client_id", idp.ClientID))
 				continue // Skip this IDP and continue with the next one
 			}
 
-			log.Error().Err(err).Str("issuer_url", idp.IssuerURL).Str("client_id", idp.ClientID).Msg("Failed to setup IDP verifier, halting startup")
+			zap.L().Error("Failed to setup IDP verifier, halting startup", zap.Error(err), zap.String("issuer_url", idp.IssuerURL), zap.String("client_id", idp.ClientID))
 			return nil, fmt.Errorf("failed to setup verifier for IDP %s (%s): %w", idp.Description, idp.IssuerURL, err)
 		}
 		idpVerifiers = append(idpVerifiers, IdpAndJwtVerifier{idpVerifier, idp}) // Pass the pointer to the config
@@ -39,37 +39,38 @@ func NewIdpVerifiers(ctx *Context, config *Config) ([]IdpAndJwtVerifier, error) 
 	return idpVerifiers, nil
 }
 
-func runVerification(jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims, *IdpAndJwtVerifier, error) {
+func runVerification(ctx context.Context, jwtToken string, items []IdpAndJwtVerifier) (*IdpJwtClaims, *IdpAndJwtVerifier, *oidc.IDToken, error) {
+	var verificationErrors []error
 	for _, item := range items {
 		if item.verifier.ctx.Options.LogSensitive {
-			log.Debug().Msgf("verifying jwt against spec. jwt=[%s], spec=[%v]", jwtToken, item.config.ValidationSpec)
+			zap.L().Debug("verifying jwt against spec", zap.String("jwt", jwtToken), zap.Any("spec", item.config.ValidationSpec))
 		}
-		reqClaims, idToken, err := item.verifier.verifyJWT(jwtToken, item.config.CustomMapping)
+		reqClaims, idToken, err := item.verifier.verifyJWT(ctx, jwtToken, item.config.CustomMapping)
 		if err != nil {
+			verificationErrors = append(verificationErrors, fmt.Errorf("idp %s: %w", item.config.Description, err))
 			var expiredErr *oidc.TokenExpiredError
 			if errors.As(err, &expiredErr) {
-				log.Debug().Msgf("error verifying idp-jwt, %s. Token expired at %v", item.config.Description, expiredErr.Expiry)
-				continue
+				zap.L().Debug("error verifying idp-jwt: token expired", zap.String("idp", item.config.Description), zap.Time("expiry", expiredErr.Expiry))
+			} else {
+				zap.L().Debug("error verifying idp-jwt, trying next idp", zap.String("idp", item.config.Description), zap.Error(err))
 			}
-			log.Trace().Err(err).Msgf("error verifying idp-jwt, %s. Trying next idp...", item.config.Description)
 			continue
 		}
 
 		err = item.verifier.validateAgainstSpec(reqClaims, item.config.ValidationSpec)
 		if err != nil {
-			log.Trace().Err(err).Msg("failed checks in idp validation")
+			verificationErrors = append(verificationErrors, fmt.Errorf("idp %s validation: %w", item.config.Description, err))
+			zap.L().Debug("failed checks in idp validation", zap.Error(err))
 			continue
 		}
 
-		// Store the idToken for use in fetching user info
-		if idToken != nil {
-			item.verifier.IDToken = idToken
-		}
-
-		return reqClaims, &item, nil
+		return reqClaims, &item, idToken, nil
 	}
 
-	return nil, nil, errors.New("no idp verifier found for jwtToken")
+	if len(verificationErrors) == 0 {
+		return nil, nil, nil, errors.New("no idp verifiers configured")
+	}
+	return nil, nil, nil, fmt.Errorf("no idp verifier matched token: %w", errors.Join(verificationErrors...))
 }
 
 type IdpJwtVerifier struct {
@@ -79,29 +80,42 @@ type IdpJwtVerifier struct {
 	issuerURL        string
 	MaxTokenLifetime time.Duration
 	ClockSkew        time.Duration
-	IDToken          *oidc.IDToken
 }
 
-func NewJwtVerifier(ctx *Context, clientID string, issuerURL string) (*IdpJwtVerifier, error) {
-	const maxTokenLifetime = time.Hour * 24
-	const clockSkew = time.Minute * 5
+const oidcTimeout = 30 * time.Second
 
-	provider, err := oidc.NewProvider(context.Background(), issuerURL)
+const (
+	DefaultMaxTokenLifetime = 24 * time.Hour
+	DefaultClockSkew        = 5 * time.Minute
+)
+
+func NewJwtVerifier(ctx *Context, clientID string, issuerURL string, maxTokenLifetime time.Duration, clockSkew time.Duration) (*IdpJwtVerifier, error) {
+	if maxTokenLifetime <= 0 {
+		maxTokenLifetime = DefaultMaxTokenLifetime
+	}
+	if clockSkew <= 0 {
+		clockSkew = DefaultClockSkew
+	}
+
+	providerCtx, providerCancel := context.WithTimeout(context.Background(), oidcTimeout)
+	defer providerCancel()
+
+	provider, err := oidc.NewProvider(providerCtx, issuerURL)
 	if err != nil {
-		log.Err(err)
+		zap.L().Error("error creating OIDC provider", zap.Error(err))
 		return nil, err
 	}
 
 	if ctx.Options.LogSensitive {
-		log.Trace().Msgf("NewJwtVerifier (config-params) clientId=%s, issuerUrl=%s", clientID, issuerURL)
+		zap.L().Debug("NewJwtVerifier config-params", zap.String("client_id", clientID), zap.String("issuer_url", issuerURL),
+			zap.Duration("max_token_lifetime", maxTokenLifetime), zap.Duration("clock_skew", clockSkew))
 	}
 
 	return &IdpJwtVerifier{
-		ctx:             ctx,
-		IDTokenVerifier: provider.Verifier(&oidc.Config{ClientID: clientID}),
-		provider:        provider,
-		issuerURL:       issuerURL,
-		// TODO: take MaxTokenLifetime from config
+		ctx:              ctx,
+		IDTokenVerifier:  provider.Verifier(&oidc.Config{ClientID: clientID}),
+		provider:         provider,
+		issuerURL:        issuerURL,
 		MaxTokenLifetime: maxTokenLifetime,
 		ClockSkew:        clockSkew,
 	}, nil
@@ -109,14 +123,17 @@ func NewJwtVerifier(ctx *Context, clientID string, issuerURL string) (*IdpJwtVer
 
 // Verifies that the ID token was signed by idp and is valid.
 // Returns the claims embedded with the token
-func (v *IdpJwtVerifier) verifyJWT(token string, customMapping map[string]string) (*IdpJwtClaims, *oidc.IDToken, error) {
+func (v *IdpJwtVerifier) verifyJWT(ctx context.Context, token string, customMapping map[string]string) (*IdpJwtClaims, *oidc.IDToken, error) {
 	claims := &IdpJwtClaims{}
 
 	if v.ctx.Options.LogSensitive {
-		log.Trace().Msgf("VerifyJWT %s", token)
+		zap.L().Debug("VerifyJWT", zap.String("token", token))
 	}
 
-	idToken, err := v.Verify(context.Background(), token)
+	verifyCtx, verifyCancel := context.WithTimeout(ctx, oidcTimeout)
+	defer verifyCancel()
+
+	idToken, err := v.Verify(verifyCtx, token)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -179,13 +196,10 @@ func (v *IdpJwtVerifier) validateAgainstSpec(claims *IdpJwtClaims, spec IdpJwtVa
 		}
 	}
 
-	if spec.SkipAudienceValidation || spec.Audience == nil || len(spec.Audience) == 0 {
-		// Skip audience validation if explicitly disabled or no audience configured
-		_ = 1
-	} else {
+	if !spec.SkipAudienceValidation && len(spec.Audience) > 0 {
 		err := claims.validateAudience(spec.Audience)
 		if err != nil {
-			log.Error().Err(err).Msgf("failed audience check: %v", spec.Audience)
+			zap.L().Error("failed audience check", zap.Any("audience", spec.Audience), zap.Error(err))
 			return err
 		}
 	}
@@ -200,14 +214,18 @@ func (v *IdpJwtVerifier) validateAgainstSpec(claims *IdpJwtClaims, spec IdpJwtVa
 	return nil
 }
 
-func (v *IdpJwtVerifier) GetUserInfo(ctx context.Context, accessToken string) (map[string]interface{}, error) {
+func (v *IdpJwtVerifier) GetUserInfo(ctx context.Context, accessToken string, idToken *oidc.IDToken) (map[string]interface{}, error) {
 	// Parse and verify the ID token
 	if accessToken == "" {
 		return nil, fmt.Errorf("no access token found in claim sources")
 	}
 
+	if idToken == nil {
+		return nil, fmt.Errorf("id token is required to verify access token")
+	}
+
 	// Verify the access token matches the hash in the ID token
-	if err := v.IDToken.VerifyAccessToken(accessToken); err != nil {
+	if err := idToken.VerifyAccessToken(accessToken); err != nil {
 		return nil, fmt.Errorf("access token verification failed: %w", err)
 	}
 

@@ -1,60 +1,33 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 
-	server "github.com/jr200/nats-iam-broker/internal/broker"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
 )
 
-var serverOpts *server.Options
-
 func main() {
-	configFiles := parseFlags()
-
-	if err := server.Start(configFiles, serverOpts); err != nil {
-		fmt.Fprintf(os.Stderr, "[service stderr]: %v\n", err)
+	rootCmd := newRootCmd()
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 }
 
-func parseFlags() []string {
-	var logLevel string
-	var logHumanReadable bool
-
-	flag.StringVar(&logLevel, "log", "info", "set log-level: disabled, panic, fatal, error, warn, info, debug, trace")
-	flag.BoolVar(&logHumanReadable, "log-human", false, "use human-readable logging output")
-
-	serverOpts = server.DefaultServerOptions()
-	flag.BoolVar(&serverOpts.LogSensitive, "log-sensitive", false, "enable sensitive logging (for debugging)")
-	flag.Parse()
-
-	configFiles := flag.Args()
-	if len(configFiles) == 0 {
-		w := flag.CommandLine.Output() // may be os.Stderr - but not necessarily
-		fmt.Fprintf(w, "usage: %s [...flags...] config_1.yaml ... config_n.yaml\n", os.Args[0])
-		flag.PrintDefaults()
-		fmt.Fprintln(w, "")
-		os.Exit(1)
+func newRootCmd() *cobra.Command {
+	root := &cobra.Command{
+		Use:   "nats-iam-broker",
+		Short: "NATS IAM Broker — OIDC-to-NATS auth callout service",
+		Long: `nats-iam-broker is a NATS auth callout microservice that validates
+OIDC tokens from identity providers and mints short-lived NATS JWTs
+with permissions defined by RBAC role bindings.`,
+		SilenceUsage: true,
 	}
 
-	configureLogging(logLevel, logHumanReadable)
+	root.AddCommand(newServeCmd())
+	root.AddCommand(newDecryptCmd())
+	root.AddCommand(newVersionCmd())
 
-	return configFiles
-}
-
-func configureLogging(logLevel string, logHumanReadable bool) {
-	level, err := zerolog.ParseLevel(logLevel)
-	if err != nil {
-		level = zerolog.InfoLevel
-	}
-	zerolog.SetGlobalLevel(level)
-
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	if logHumanReadable {
-		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
-	}
+	return root
 }

@@ -1,4 +1,4 @@
-package server
+package broker
 
 import (
 	"encoding/json"
@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/rs/zerolog/log"
+	"go.uber.org/zap"
 )
 
 // Mapping of JSON field names to struct field names
@@ -55,8 +55,8 @@ type IdpJwtClaims struct {
 	ZoneInfo          string                 `json:"zoneinfo,omitempty"`
 	Locale            string                 `json:"locale,omitempty"`
 	ClientID          string                 `json:"client_id,omitempty"`
-	Groups            string                 `json:"groups,omitempty"`
-	Roles             string                 `json:"roles,omitempty"`
+	Groups            interface{}            `json:"groups,omitempty"`
+	Roles             interface{}            `json:"roles,omitempty"`
 	Email             string                 `json:"email,omitempty"`
 	EmailVerified     bool                   `json:"email_verified,omitempty"`
 	Picture           string                 `json:"picture,omitempty"`
@@ -95,13 +95,13 @@ func (j *IdpJwtClaims) toMap() map[string]interface{} {
 	// Marshal standard fields
 	jsonBytes, err := json.Marshal(j)
 	if err != nil {
-		log.Err(err)
+		zap.L().Error("failed to marshal claims", zap.Error(err))
 		return result
 	}
 
 	// Unmarshal standard fields
 	if err := json.Unmarshal(jsonBytes, &result); err != nil {
-		log.Err(err)
+		zap.L().Error("failed to unmarshal claims", zap.Error(err))
 		return result
 	}
 
@@ -115,7 +115,7 @@ func (j *IdpJwtClaims) toMap() map[string]interface{} {
 
 func (j *IdpJwtClaims) exists(expected []string) error {
 	claimsMap := j.toMap()
-	log.Trace().Msgf("idp claims: %v", claimsMap)
+	zap.L().Debug("idp claims", zap.Any("claims", claimsMap))
 	for _, claimName := range expected {
 		_, found := claimsMap[claimName]
 
@@ -223,6 +223,12 @@ func (j *IdpJwtClaims) fromMap(m map[string]interface{}, customMapping map[strin
 				j.IssuedAt = toInt64(value)
 			case "NotBeforeTime":
 				j.NotBeforeTime = toInt64(value)
+			case "Groups", "Roles":
+				// Preserve original type (string or array) for expression matching
+				field := reflect.ValueOf(j).Elem().FieldByName(structField)
+				if field.IsValid() && field.CanSet() {
+					field.Set(reflect.ValueOf(value))
+				}
 			default:
 				// Use reflection to set the field value
 				field := reflect.ValueOf(j).Elem().FieldByName(structField)

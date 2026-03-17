@@ -34,38 +34,51 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- if .Values.devDebug }}
-          command: 
-            - sleep
           args:
-            - infinity
-          {{- else }}
-          args:
-            - -log={{ .Values.logging.level }}
-{{- if not .Values.logging.json }}
-            - -log-human
+            - serve
+            - /config/config.yaml
+{{- if .Values.server.metrics }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.server.metrics_port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
 {{- end }}
-          {{- end }}
+          {{- with .Values.envFrom }}
           envFrom:
-            {{- toYaml .Values.envFrom | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.env }}
           env:
-            {{- toYaml .Values.env | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
-            - name: volume-config-rbac
-              mountPath: /config/40-rbac.yaml
-              subPath: 40-rbac.yaml
+            - name: config
+              mountPath: /config/config.yaml
+              subPath: config.yaml
               readOnly: true
-            {{- if .Values.volumeMounts }}
-            {{ toYaml .Values.volumeMounts | nindent 12 }}
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
       volumes:
-        - name: volume-config-rbac
+        - name: config
           configMap:
-            name: {{ include "nats-iam-broker.fullname" . }}-rbac
-        {{- if .Values.volumes }}
-        {{ toYaml .Values.volumes | nindent 8 }}
+            name: {{ include "nats-iam-broker.fullname" . }}
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

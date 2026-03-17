@@ -1,34 +1,61 @@
-package server
+package broker
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-playground/validator"
 	"github.com/goccy/go-yaml"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
-	"github.com/rs/zerolog/log"
 	"github.com/xhit/go-str2duration/v2"
+	"go.uber.org/zap"
 )
 
 const (
-	DefaultTokenExpiryBoundsMin = 1 * time.Minute
-	DefaultTokenExpiryBoundsMax = 1 * time.Hour
+	DefaultTokenExpiryBoundsLower = 1 * time.Minute
+	DefaultTokenExpiryBoundsUpper = 1 * time.Hour
+
+	configPhaseInitial = "initial"
+	configPhaseRender  = "render"
 )
+
+// configParsePhase tracks which config parsing phase is active.
+// During "initial" phase, template parse failures are expected and logged at Debug.
+// During "render" phase, they indicate a real template rendering failure and are logged at Warn.
+// Uses atomic.Value for thread safety since UnmarshalText is called concurrently via GetConfig.
+var configParsePhase atomic.Value
+
+func init() {
+	configParsePhase.Store(configPhaseRender)
+}
+
+func getConfigParsePhase() string {
+	return configParsePhase.Load().(string)
+}
+
+func setConfigParsePhase(phase string) {
+	configParsePhase.Store(phase)
+}
 
 // Struct definitions
 type Config struct {
 	AppParams ConfigParams `yaml:"params"`
+	Server    Options      `yaml:"server"`
 	NATS      NATS         `yaml:"nats" validate:"required"`
 	Service   Service      `yaml:"service" validate:"required"`
 	Idp       []Idp        `yaml:"idp" validate:"required"`
 	Rbac      Rbac         `yaml:"rbac" validate:"required"`
+
+	exprCache *sync.Map `yaml:"-"` // shared compiled expr-lang expression cache
 }
 
 type ConfigParams struct {
@@ -38,7 +65,7 @@ type ConfigParams struct {
 
 type NATS struct {
 	URL               string         `yaml:"url" validate:"required"`
-	TokenExpiryBounds DurationBounds `yaml:"token_bounds" validate:"required"`
+	TokenExpiryBounds DurationBounds `yaml:"jwt_expiry_bounds" validate:"required"`
 }
 
 type Service struct {
@@ -50,14 +77,9 @@ type Service struct {
 }
 
 type ServiceAccount struct {
-	Name        string     `yaml:"name"`
-	SigningNKey NKey       `yaml:"signing_nkey" validate:"required"`
-	Encryption  Encryption `yaml:"encryption" validate:"required"`
-}
-
-type Encryption struct {
-	Enabled bool `yaml:"enabled" validate:"required"`
-	Seed    NKey `yaml:"xkey_secret"`
+	Name        string `yaml:"name"`
+	SigningNKey NKey   `yaml:"signing_nkey" validate:"required"`
+	XKeySeed    NKey   `yaml:"xkey_seed"`
 }
 
 type Idp struct {
@@ -69,6 +91,8 @@ type Idp struct {
 	TokenExpiryBounds DurationBounds       `yaml:"token_bounds"`
 	CustomMapping     map[string]string    `yaml:"custom_mapping"`
 	IgnoreSetupError  bool                 `yaml:"ignore_setup_error"`
+	MaxTokenLifetime  Duration             `yaml:"max_token_lifetime"`
+	ClockSkew         Duration             `yaml:"clock_skew"`
 }
 
 type UserInfoConfig struct {
@@ -107,6 +131,16 @@ type TokenRequest struct {
 type ConfigManager struct {
 	mergedYAML string
 	baseConfig Config // stores the initial config with defaults
+
+	// Cached resources to avoid re-creation on every GetConfig call
+	validate      *validator.Validate
+	templateCache *templateCache
+	exprCache     *sync.Map // map[string]*vm.Program — compiled expr-lang expressions
+}
+
+// ServerOptions returns the server options parsed from the YAML configuration.
+func (cm *ConfigManager) ServerOptions() Options {
+	return cm.baseConfig.Server
 }
 
 // NewConfigManager creates a new ConfigManager instance
@@ -120,9 +154,14 @@ func NewConfigManager(files []string) (*ConfigManager, error) {
 	baseConfig := Config{}
 
 	// Parse the merged YAML into base config
-	if err := yaml.Unmarshal([]byte(merged), &baseConfig); err != nil {
+	// Template expressions haven't been rendered yet, so parse failures for
+	// templated values (NKey, Duration) are expected and logged at Debug level.
+	setConfigParsePhase(configPhaseInitial)
+	if err := yaml.UnmarshalWithOptions([]byte(merged), &baseConfig, yaml.DisallowUnknownField()); err != nil {
+		setConfigParsePhase(configPhaseRender)
 		return nil, improveYAMLErrorMessage(err)
 	}
+	setConfigParsePhase(configPhaseRender)
 
 	if baseConfig.Service.Name == "" {
 		return nil, fmt.Errorf("missing configuration value service.name")
@@ -136,15 +175,27 @@ func NewConfigManager(files []string) (*ConfigManager, error) {
 	}
 
 	if baseConfig.NATS.TokenExpiryBounds.Min.Duration == 0 {
-		baseConfig.NATS.TokenExpiryBounds.Min.Duration = DefaultTokenExpiryBoundsMin
+		baseConfig.NATS.TokenExpiryBounds.Min.Duration = DefaultTokenExpiryBoundsLower
 	}
 	if baseConfig.NATS.TokenExpiryBounds.Max.Duration == 0 {
-		baseConfig.NATS.TokenExpiryBounds.Max.Duration = DefaultTokenExpiryBoundsMax
+		baseConfig.NATS.TokenExpiryBounds.Max.Duration = DefaultTokenExpiryBoundsUpper
 	}
 
+	// Pre-compile validator with custom validations
+	v := validator.New()
+	if err := v.RegisterValidation("semver", validateSemVer); err != nil {
+		return nil, fmt.Errorf("error registering semver validation: %v", err)
+	}
+
+	// Pre-compile template regex and templates
+	tc := newTemplateCache(merged, baseConfig.AppParams)
+
 	return &ConfigManager{
-		mergedYAML: merged,
-		baseConfig: baseConfig,
+		mergedYAML:    merged,
+		baseConfig:    baseConfig,
+		validate:      v,
+		templateCache: tc,
+		exprCache:     &sync.Map{},
 	}, nil
 }
 
@@ -153,12 +204,12 @@ func (cm *ConfigManager) GetConfig(mappings map[string]interface{}) (*Config, er
 	// Create a new config instance starting with the base config
 	cfg := cm.baseConfig
 
-	// Render templates with provided mappings
-	renderedYAML := renderAllTemplates(cm.mergedYAML, mappings, cfg.AppParams)
+	// Render templates with provided mappings using pre-compiled templates
+	renderedYAML := cm.templateCache.renderAll(cm.mergedYAML, mappings)
 
 	// Create a temporary config to hold rendered values
 	var tempCfg Config
-	if err := yaml.Unmarshal([]byte(renderedYAML), &tempCfg); err != nil {
+	if err := yaml.UnmarshalWithOptions([]byte(renderedYAML), &tempCfg, yaml.DisallowUnknownField()); err != nil {
 		return nil, improveYAMLErrorMessage(err)
 	}
 
@@ -167,10 +218,10 @@ func (cm *ConfigManager) GetConfig(mappings map[string]interface{}) (*Config, er
 	cfg.NATS.URL = tempCfg.NATS.URL
 	cfg.NATS.TokenExpiryBounds = tempCfg.NATS.TokenExpiryBounds
 	if cfg.NATS.TokenExpiryBounds.Max.Duration == 0 {
-		cfg.NATS.TokenExpiryBounds.Max.Duration = DefaultTokenExpiryBoundsMax
+		cfg.NATS.TokenExpiryBounds.Max.Duration = DefaultTokenExpiryBoundsUpper
 	}
 	if cfg.NATS.TokenExpiryBounds.Min.Duration == 0 {
-		cfg.NATS.TokenExpiryBounds.Min.Duration = DefaultTokenExpiryBoundsMin
+		cfg.NATS.TokenExpiryBounds.Min.Duration = DefaultTokenExpiryBoundsLower
 	}
 
 	cfg.Service.Name = tempCfg.Service.Name
@@ -195,7 +246,7 @@ func (cm *ConfigManager) GetConfig(mappings map[string]interface{}) (*Config, er
 			return strings.ContainsRune(illegalChars, r)
 		})
 
-		log.Warn().Str("original", cfg.Service.Name).Str("sanitized", sanitizedName).Msg("Service name contained illegal characters for NATS subjects, sanitizing")
+		zap.L().Warn("Service name contained illegal characters for NATS subjects, sanitizing", zap.String("original", cfg.Service.Name), zap.String("sanitized", sanitizedName))
 		cfg.Service.Name = sanitizedName
 	}
 
@@ -203,24 +254,18 @@ func (cm *ConfigManager) GetConfig(mappings map[string]interface{}) (*Config, er
 	if tempCfg.Service.Account.SigningNKey.KeyPair != nil {
 		cfg.Service.Account.SigningNKey = tempCfg.Service.Account.SigningNKey
 	}
-	if tempCfg.Service.Account.Encryption.Seed.KeyPair != nil {
-		cfg.Service.Account.Encryption.Seed = tempCfg.Service.Account.Encryption.Seed
+	if tempCfg.Service.Account.XKeySeed.KeyPair != nil {
+		cfg.Service.Account.XKeySeed = tempCfg.Service.Account.XKeySeed
 	}
 
 	cfg.Service.Account.Name = tempCfg.Service.Account.Name
-	cfg.Service.Account.Encryption.Enabled = tempCfg.Service.Account.Encryption.Enabled
 
 	// Update IDP list and RBAC
 	cfg.Idp = tempCfg.Idp
 	cfg.Rbac = tempCfg.Rbac
 
-	// Validate the final config
-	validate := validator.New()
-	if err := validate.RegisterValidation("semver", validateSemVer); err != nil {
-		return nil, fmt.Errorf("error registering semver validation: %v", err)
-	}
-
-	if err := validate.Struct(&cfg); err != nil {
+	// Validate the final config using pre-compiled validator
+	if err := cm.validate.Struct(&cfg); err != nil {
 		if validationErrors, ok := err.(validator.ValidationErrors); ok {
 			var errorMessages []string
 			for _, fieldErr := range validationErrors {
@@ -230,6 +275,43 @@ func (cm *ConfigManager) GetConfig(mappings map[string]interface{}) (*Config, er
 		}
 		return nil, err
 	}
+
+	// Discover and merge auto-accounts if auto_accounts_dir is set
+	if cfg.Rbac.AutoAccountsDir != "" {
+		discovered, err := cfg.Rbac.discoverAccounts()
+		if err != nil {
+			return nil, fmt.Errorf("auto-account discovery failed: %w", err)
+		}
+		// Merge discovered accounts, skipping any that already exist by name
+		existing := make(map[string]bool, len(cfg.Rbac.Accounts))
+		for _, acct := range cfg.Rbac.Accounts {
+			existing[acct.Name] = true
+		}
+		for _, acct := range discovered {
+			if existing[acct.Name] {
+				zap.L().Debug("auto_accounts_dir: skipping already-defined account", zap.String("account", acct.Name))
+				continue
+			}
+			cfg.Rbac.Accounts = append(cfg.Rbac.Accounts, acct)
+		}
+	}
+
+	// Warn about role bindings with missing account or roles
+	for i, rb := range cfg.Rbac.RoleBinding {
+		if rb.Account == "" {
+			zap.L().Warn("role binding has empty 'user_account' — auth requests matching this binding will fail",
+				zap.Int("binding_index", i),
+				zap.Int("match_criteria", len(rb.Match)))
+		}
+		if len(rb.Roles) == 0 {
+			zap.L().Warn("role binding has no 'roles' assigned — matched users will get empty permissions",
+				zap.Int("binding_index", i),
+				zap.String("user_account", rb.Account))
+		}
+	}
+
+	// Attach shared expression cache for role binding evaluation
+	cfg.exprCache = cm.exprCache
 
 	return &cfg, nil
 }
@@ -245,21 +327,24 @@ func (c *Config) natsOptions() []nats.Option {
 	return opts
 }
 
-// serviceEncryptionXkey returns the encryption key pair for the service account
+// serviceEncryptionXkey returns the encryption key pair for the service account.
+// Encryption is enabled when an xkey_seed is configured.
 func (c *Config) serviceEncryptionXkey() nkeys.KeyPair {
-	if c.Service.Account.Encryption.Enabled {
-		return c.Service.Account.Encryption.Seed.KeyPair
-	}
-
-	return nil
+	return c.Service.Account.XKeySeed.KeyPair
 }
 
 // UnmarshalText unmarshals a Duration from a string
 func (v *Duration) UnmarshalText(text []byte) error {
 	d, err := str2duration.ParseDuration(string(text))
 	if err != nil {
-		// possibly templated
-		log.Debug().Msgf("failed to parse duration from '%s' (%v)", string(text), err)
+		s := string(text)
+		if strings.Contains(s, "{{") && getConfigParsePhase() == configPhaseInitial {
+			zap.L().Debug("skipped parsing duration (unrendered template)",
+				zap.String("value", s))
+		} else {
+			zap.L().Warn("failed to parse duration",
+				zap.String("value", s), zap.Error(err))
+		}
 		return nil
 	}
 	v.Duration = d
@@ -271,8 +356,14 @@ func (v *NKey) UnmarshalText(text []byte) error {
 	text = bytes.TrimSpace(text)
 	nkey, err := nkeys.FromSeed(text)
 	if err != nil {
-		// possibly templated
-		log.Debug().Msgf("skipped parsing nkey: %v (%v)", SecureLogKey(string(text)), err)
+		s := string(text)
+		if strings.Contains(s, "{{") && getConfigParsePhase() == configPhaseInitial {
+			zap.L().Debug("skipped parsing nkey (unrendered template)",
+				zap.String("value", SecureLogKey(s)))
+		} else {
+			zap.L().Warn("failed to parse nkey",
+				zap.String("value", SecureLogKey(s)), zap.Error(err))
+		}
 		return nil
 	}
 	v.KeyPair = nkey
@@ -360,6 +451,17 @@ func (v *NKey) UnmarshalYAML(unmarshal func(interface{}) error) error {
 // Helper function to improve YAML unmarshaling error messages
 func improveYAMLErrorMessage(err error) error {
 	errMsg := err.Error()
+
+	// Check for unknown field errors (from DisallowUnknownField)
+	var unknownFieldErr *yaml.UnknownFieldError
+	if errors.As(err, &unknownFieldErr) {
+		return fmt.Errorf("YAML configuration error: %w\n\n"+
+			"This field is not recognized. Common causes:\n"+
+			"  - Incorrect indentation (e.g. a field nested inside 'match' that belongs on the role-binding level)\n"+
+			"  - Typo in the field name\n"+
+			"  - Using camelCase instead of snake_case (e.g. 'tokenMaxExpiration' should be 'token_max_expiration')\n"+
+			"Check the indentation and field names in ALL your config files.", err)
+	}
 
 	// Check if it's an unmarshaling error
 	if !strings.Contains(errMsg, "unmarshal") {
@@ -472,7 +574,7 @@ func mergeConfigurationFiles(files []string) (string, error) {
 		}
 
 		for _, filePath := range paths {
-			log.Debug().Msgf("merging config %s", filePath)
+			zap.L().Debug("merging config", zap.String("file", filePath))
 			raw, err := os.ReadFile(filePath)
 			if err != nil {
 				return "", fmt.Errorf("error reading file content: %v", err)
@@ -501,6 +603,9 @@ func mergeConfigurationFiles(files []string) (string, error) {
 	return string(mergedYAML), nil
 }
 
+// deepMerge recursively merges overlay into base. Maps are merged recursively,
+// arrays are concatenated (not replaced), and primitive values from overlay
+// take precedence over base.
 func deepMerge(base, overlay map[string]interface{}) map[string]interface{} {
 	result := make(map[string]interface{})
 

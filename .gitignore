@@ -13,7 +13,6 @@
 
 # Application binaries
 service/service
-test-client/test-client
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
@@ -43,3 +42,7 @@ cmd/nats-iam-broker/__debug_bin*
 run/
 
 .env.local
+
+# Generated quarto config (built from _quarto.yml.tpl)
+docs/site/_quarto.yml
+/nats-iam-broker

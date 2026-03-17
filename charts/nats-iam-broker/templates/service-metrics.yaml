@@ -1,0 +1,17 @@
+{{- if .Values.server.metrics }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nats-iam-broker.fullname" . }}-metrics
+  labels:
+    {{- include "nats-iam-broker.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.server.metrics_port }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "nats-iam-broker.selectorLabels" . | nindent 4 }}
+{{- end }}

@@ -1,4 +1,4 @@
-ARG GOVERSION=1.24
+ARG GOVERSION=1.26
 FROM golang:${GOVERSION}-alpine AS builder
 
 ARG BUILD_ARCH
@@ -23,8 +23,8 @@ FROM alpine:3
 LABEL org.opencontainers.image.source="https://github.com/jr200/nats-iam-broker"
 LABEL org.opencontainers.image.description="nats-iam-broker runtime stage"
 
-RUN apk add --no-cache bash && \
-    apk add --no-cache --update ca-certificates jq
+RUN apk add --no-cache bash ca-certificates jq && \
+    addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /usr/src/app
 
@@ -32,5 +32,10 @@ COPY ./docker/docker-entrypoint.sh /docker-entrypoint.sh
 COPY ./docker/config /config/
 
 COPY --from=builder /usr/local/bin/nats-iam-broker /usr/local/bin/nats-iam-broker
+
+USER appuser
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD ["nats-iam-broker", "version"] || exit 1
 
 ENTRYPOINT ["/docker-entrypoint.sh"]

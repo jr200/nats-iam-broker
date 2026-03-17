@@ -1,11 +1,10 @@
-package server
+package broker
 
 import (
 	"bytes"
 	"testing"
 	"time"
 
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -125,6 +124,85 @@ func TestIdpJwtVerifier_ValidateAgainstSpec(t *testing.T) {
 	}
 }
 
+func TestIdpJwtVerifier_ValidateTimes(t *testing.T) {
+	verifier := &IdpJwtVerifier{
+		MaxTokenLifetime: 24 * time.Hour,
+		ClockSkew:        5 * time.Minute,
+	}
+
+	now := time.Now()
+
+	tests := []struct {
+		name      string
+		issuedAt  time.Time
+		expiry    time.Time
+		expectErr string
+	}{
+		{
+			name:     "valid token",
+			issuedAt: now.Add(-10 * time.Minute),
+			expiry:   now.Add(50 * time.Minute),
+		},
+		{
+			name:      "missing issued at",
+			issuedAt:  time.Unix(0, 0),
+			expiry:    now.Add(1 * time.Hour),
+			expectErr: "missing 'issued at'",
+		},
+		{
+			name:      "missing expiry",
+			issuedAt:  now.Add(-10 * time.Minute),
+			expiry:    time.Unix(0, 0),
+			expectErr: "missing 'expiry'",
+		},
+		{
+			name:      "expiry too far in future",
+			issuedAt:  now.Add(-1 * time.Minute),
+			expiry:    now.Add(25 * time.Hour),
+			expectErr: "expiry too far in future",
+		},
+		{
+			name:      "token used too early",
+			issuedAt:  now.Add(10 * time.Minute),
+			expiry:    now.Add(1 * time.Hour),
+			expectErr: "token used too early",
+		},
+		{
+			name:      "token used too late (expired beyond skew)",
+			issuedAt:  now.Add(-2 * time.Hour),
+			expiry:    now.Add(-10 * time.Minute),
+			expectErr: "token used too late",
+		},
+		{
+			name:     "token within clock skew (issued slightly in future)",
+			issuedAt: now.Add(3 * time.Minute), // within 5 min skew
+			expiry:   now.Add(1 * time.Hour),
+		},
+		{
+			name:     "token within clock skew (expired slightly ago)",
+			issuedAt: now.Add(-1 * time.Hour),
+			expiry:   now.Add(-3 * time.Minute), // within 5 min skew
+		},
+		{
+			name:     "expiry exactly at max lifetime boundary",
+			issuedAt: now.Add(-1 * time.Minute),
+			expiry:   now.Add(24 * time.Hour),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := verifier.ValidateTimes(tt.issuedAt, tt.expiry)
+			if tt.expectErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectErr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 // Mock OIDC provider setup for tests - needed by NewJwtVerifier
 // We'll need to potentially intercept HTTP requests if NewProvider actually tries to connect
 // For now, let's assume we can use a test helper or mock server if needed.
@@ -135,7 +213,6 @@ func TestNewIdpVerifiers(t *testing.T) {
 	// uses a logger passed via context or other means, NOT the potentially
 	// inaccessible global server.Log
 	logOutput := &bytes.Buffer{}
-	_ = zerolog.New(logOutput).Level(zerolog.ErrorLevel).With().Timestamp().Logger() // Assign to blank identifier
 
 	// Passing nil for server.Context as its structure is unclear and causing issues.
 	// If NewIdpVerifiers requires a non-nil context with specific fields,
@@ -222,9 +299,7 @@ func TestNewIdpVerifiers(t *testing.T) {
 				Idp: tc.idpConfigs,
 				// Add other minimal required config fields if necessary
 				Service: Service{
-					Account: ServiceAccount{
-						Encryption: Encryption{Enabled: false},
-					},
+					Account: ServiceAccount{},
 				},
 				NATS: NATS{
 					TokenExpiryBounds: DurationBounds{Max: Duration{Duration: time.Hour}},

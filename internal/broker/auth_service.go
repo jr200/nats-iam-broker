@@ -1,13 +1,15 @@
-package server
+package broker
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
+	"github.com/jr200/nats-iam-broker/internal/metrics"
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nats.go/micro"
 	"github.com/nats-io/nkeys"
-	"github.com/rs/zerolog/log"
+	"go.uber.org/zap"
 )
 
 // SigningKeyInfo contains information about what type of key was used to sign
@@ -21,16 +23,18 @@ type AuthService struct {
 	serviceAccountKey nkeys.KeyPair
 	encryptionKey     nkeys.KeyPair
 	createNewClaimsFn AuthHandler
+	metrics           *metrics.Metrics
 }
 
-type AuthHandler func(req *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error)
+type AuthHandler func(ctx context.Context, req *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error)
 
-func NewAuthService(ctx *Context, issuer nkeys.KeyPair, xkey nkeys.KeyPair, handler AuthHandler) *AuthService {
+func NewAuthService(ctx *Context, issuer nkeys.KeyPair, xkey nkeys.KeyPair, handler AuthHandler, m *metrics.Metrics) *AuthService {
 	return &AuthService{
 		ctx:               ctx,
 		serviceAccountKey: issuer,
 		encryptionKey:     xkey,
 		createNewClaimsFn: handler,
+		metrics:           m,
 	}
 }
 
@@ -45,7 +49,7 @@ func determineSigningKeyType(claims *jwt.UserClaims, kp nkeys.KeyPair, accountIn
 	// Check if the signing key matches the issuer account directly
 	switch {
 	case claims.IssuerAccount == signingPubKey:
-		log.Trace().Msg("signing key matches account public key directly")
+		zap.L().Debug("signing key matches account public key directly")
 		return &SigningKeyInfo{
 			Type:      "pub_key",
 			PublicKey: signingPubKey,
@@ -58,7 +62,7 @@ func determineSigningKeyType(claims *jwt.UserClaims, kp nkeys.KeyPair, accountIn
 
 		if signingPubKey == signingNKeyPub {
 			// The signing key matches the account's authorized signing key
-			log.Trace().Msg("signing key matches account signing key")
+			zap.L().Debug("signing key matches account signing key")
 			return &SigningKeyInfo{
 				Type:      "signing_key",
 				PublicKey: signingNKeyPub,
@@ -73,7 +77,7 @@ func determineSigningKeyType(claims *jwt.UserClaims, kp nkeys.KeyPair, accountIn
 }
 
 func (a *AuthService) Handle(inRequest micro.Request) {
-	log.Trace().Msgf("handling request (headers): %s", SecureLogKey(inRequest.Headers()))
+	zap.L().Debug("handling request", zap.String("headers", SecureLogKey(inRequest.Headers())))
 
 	var token []byte
 	var err error
@@ -81,6 +85,9 @@ func (a *AuthService) Handle(inRequest micro.Request) {
 	xkey := inRequest.Headers().Get("Nats-Server-Xkey")
 	if len(xkey) > 0 {
 		if a.encryptionKey == nil {
+			if a.metrics != nil {
+				a.metrics.RequestErrors.WithLabelValues(metrics.StageDecrypt).Inc()
+			}
 			_ = inRequest.Error("500", "xkey not supported", nil)
 			return
 		}
@@ -88,6 +95,9 @@ func (a *AuthService) Handle(inRequest micro.Request) {
 		// Decrypt the message.
 		token, err = a.encryptionKey.Open(inRequest.Data(), xkey)
 		if err != nil {
+			if a.metrics != nil {
+				a.metrics.RequestErrors.WithLabelValues(metrics.StageDecrypt).Inc()
+			}
 			_ = inRequest.Error("500", fmt.Sprintf("error decrypting message: %s", err.Error()), nil)
 			return
 		}
@@ -97,8 +107,12 @@ func (a *AuthService) Handle(inRequest micro.Request) {
 
 	rc, err := jwt.DecodeAuthorizationRequestClaims(string(token))
 	if err != nil {
-		log.Err(err)
+		if a.metrics != nil {
+			a.metrics.RequestErrors.WithLabelValues(metrics.StageDecode).Inc()
+		}
+		zap.L().Error("failed to decode authorization request claims", zap.Error(err))
 		_ = inRequest.Error("500", err.Error(), nil)
+		return
 	}
 
 	userNkey := rc.UserNkey
@@ -106,13 +120,17 @@ func (a *AuthService) Handle(inRequest micro.Request) {
 
 	var sk nkeys.KeyPair
 	var accountInfo *UserAccountInfo
-	claims, sk, accountInfo, err := a.createNewClaimsFn(rc)
+	reqCtx := context.Background()
+	claims, sk, accountInfo, err := a.createNewClaimsFn(reqCtx, rc)
 	if err != nil {
 		a.Respond(inRequest, userNkey, serverID, "", err)
 		return
 	}
 
 	signedToken, err := ValidateAndSign(claims, sk, accountInfo)
+	if err != nil && a.metrics != nil {
+		a.metrics.ResponseErrors.WithLabelValues(metrics.StageSign).Inc()
+	}
 	a.Respond(inRequest, userNkey, serverID, signedToken, err)
 }
 
@@ -124,14 +142,17 @@ func (a *AuthService) Respond(req micro.Request, userNKey, serverID, userJwt str
 		rc.Error = err.Error()
 	}
 
-	log.Trace().Msgf("signing response with micro-service account")
+	zap.L().Debug("signing response with micro-service account")
 	token, err := rc.Encode(a.serviceAccountKey)
 	if err != nil {
-		log.Err(err).Msg("couldn't sign response")
+		zap.L().Error("couldn't sign response", zap.Error(err))
+		if a.metrics != nil {
+			a.metrics.ResponseErrors.WithLabelValues(metrics.StageSign).Inc()
+		}
 	}
 
 	if a.ctx.Options.LogSensitive {
-		log.Debug().Msgf("minted jwt: %s", userJwt)
+		zap.L().Debug("minted jwt", zap.String("jwt", userJwt))
 	}
 
 	data := []byte(token)
@@ -139,10 +160,13 @@ func (a *AuthService) Respond(req micro.Request, userNKey, serverID, userJwt str
 	// Check if encryption is required.
 	xkey := req.Headers().Get("Nats-Server-Xkey")
 	if len(xkey) > 0 {
-		log.Trace().Msgf("xkey encrypting response")
+		zap.L().Debug("xkey encrypting response")
 		data, err = a.encryptionKey.Seal(data, xkey)
 		if err != nil {
-			log.Err(err).Msg("couldn't xkey-encrypt payload")
+			zap.L().Error("couldn't xkey-encrypt payload", zap.Error(err))
+			if a.metrics != nil {
+				a.metrics.ResponseErrors.WithLabelValues(metrics.StageEncrypt).Inc()
+			}
 			_ = req.Respond(nil)
 			return
 		}

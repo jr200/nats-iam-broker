@@ -1,214 +1,360 @@
 # Default values for nats-iam-broker.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
+# See the full values reference below for all configurable fields.
 
-# Enable or disable debug mode for development
-devDebug: false
+# ---------------------------------------------------------------------------
+# Deployment settings
+# ---------------------------------------------------------------------------
 
-# Number of replicas for the deployment
+# Number of pod replicas for the Deployment.
 replicaCount: 1
 
 image:
-  #  The Docker image repository
+  # Container image repository.
   repository: ghcr.io/jr200/nats-iam-broker
-  # The image pull policy (Always, IfNotPresent, Never)
-  pullPolicy: Always
-  # Overrides the image tag whose default is the chart appVersion.
+  # Image pull policy. One of: Always, IfNotPresent, Never.
+  pullPolicy: IfNotPresent
+  # Overrides the image tag. Defaults to the chart's appVersion if empty.
   tag: ""
 
+# List of Kubernetes Secret references for pulling images from private registries.
+# Example:
+#   - name: my-registry-secret
 imagePullSecrets: []
-# Override the default name of the chart
+
+# Override the chart's default name (used in resource naming).
 nameOverride: ""
-# Override the full name of the chart
+# Override the fully-qualified app name (used in resource naming).
+# Takes precedence over nameOverride.
 fullnameOverride: ""
 
-logging:
-  json: false # Set to true to enable JSON logging
-  level: info # Set logging level: error, warn, info, debug, trace
+# ---------------------------------------------------------------------------
+# Server operational settings
+# These are rendered into the config file's `server:` section
+# and also control deployment args, ports, and probes.
+# ---------------------------------------------------------------------------
+server:
+  # Application log level.
+  # One of: disabled, panic, fatal, error, warn, info, debug, trace.
+  # Can be overridden by the --log-level CLI flag.
+  log_level: info
 
+  # Log output format.
+  #   json  - structured JSON (production default)
+  #   human - colored console output for local development
+  # Can be overridden by the --log-format CLI flag.
+  log_format: json
+
+  # When true, sensitive data (tokens, keys) is included in log output.
+  # Only enable for debugging; never in production.
+  # Can be overridden by the --log-sensitive CLI flag.
+  log_sensitive: false
+
+  # Enable the Prometheus metrics HTTP endpoint.
+  # When true, the deployment exposes a container port, creates a
+  # ClusterIP Service (service-metrics), and adds liveness/readiness probes
+  # at /healthz and /readyz respectively.
+  # Can be overridden by the --metrics CLI flag.
+  metrics: false
+
+  # Port number for the metrics/health HTTP server.
+  # Only used when `metrics` is true.
+  # Can be overridden by the --metrics-port CLI flag.
+  metrics_port: 8080
+
+  # Enable hot-reload of config files via filesystem watching.
+  # When true, changes to the mounted ConfigMap trigger an automatic
+  # config reload without restarting the pod. Uses fsnotify with a 500ms
+  # debounce and handles Kubernetes ConfigMap symlink rotations.
+  # Can be overridden by the --watch CLI flag.
+  watch: false
+
+  # Prometheus ServiceMonitor resource (requires the Prometheus Operator CRD).
+  # Only created when both `server.metrics` and `serviceMonitor.enabled` are true.
+  serviceMonitor:
+    # Create a ServiceMonitor custom resource.
+    enabled: false
+    # Prometheus scrape interval.
+    interval: 30s
+    # Additional labels applied to the ServiceMonitor (e.g. for label-based
+    # scrape target selection).
+    labels: {}
+
+# ---------------------------------------------------------------------------
+# Application configuration
+# Rendered as a ConfigMap and mounted at /config/config.yaml inside the pod.
+#
+# String values support Go template expressions that are evaluated at runtime:
+#   {{ env "VAR" }}                 - read an environment variable
+#   {{ expandEnv "$HOME/path" }}    - expand env vars in a string
+#   {{ readFile "/path/file" }}     - read entire file contents
+#   {{ readNthLine N "/path/file" }}- read the Nth line of a file (0-indexed)
+#   {{ b64encode .field }}          - base64-encode a value
+# ---------------------------------------------------------------------------
 config:
-  # role-based access control configuration section
+
+  # -------------------------------------------------------------------------
+  # NATS connection
+  # -------------------------------------------------------------------------
+  nats:
+    # NATS server URL. Supports templating, e.g.:
+    #   url: '{{ env "NATS_URL" }}'
+    url: "nats://nats:4222"
+
+    # Global bounds for NATS JWT token expiration.
+    # These act as an outer ceiling/floor. More specific bounds (IDP, RBAC,
+    # role binding) are clamped within these limits.
+    # Accepts duration strings: "1s", "5m", "1h30m", "7d", etc.
+    jwt_expiry_bounds:
+      min: 1m
+      max: 24h
+
+  # -------------------------------------------------------------------------
+  # Service identity
+  # The broker registers itself as a NATS micro-service with this metadata.
+  # -------------------------------------------------------------------------
+  service:
+    # Service name (required). Illegal NATS subject characters
+    # (spaces, tabs, '.', '*', '>', '/') are automatically sanitized.
+    name: ""
+
+    # Semantic version string (required). Must follow semver format (e.g. "1.2.3").
+    version: "0.1.0"
+
+    # Human-readable description of the service (required).
+    description: ""
+
+    # Path to the NATS user credentials file (.creds) used by the broker
+    # to authenticate itself to the NATS server. Typically mounted via a
+    # Kubernetes Secret (see `volumes` / `volumeMounts` below).
+    creds_file: "/secrets/user.creds"
+
+    # The NATS account that this broker signs JWTs on behalf of.
+    account:
+      # Account name (required).
+      name: ""
+
+      # NKey seed used to sign user JWTs. This is the account's signing key.
+      # Typically loaded from a mounted secret file at runtime:
+      #   signing_nkey: '{{ readFile "/secrets/signing.nk" }}'
+      signing_nkey: ""
+
+      # XKey seed for encrypted authorization responses (optional).
+      # When set, the broker encrypts auth responses so only the NATS server
+      # holding the corresponding public key can decrypt them.
+      #   xkey_seed: '{{ readNthLine 1 "/secrets/enc.xk" }}'
+      xkey_seed: ""
+
+  # -------------------------------------------------------------------------
+  # Identity Providers (IdP)
+  # List of OIDC-compatible identity providers. The broker validates incoming
+  # JWT tokens against these providers during the NATS auth callout flow.
+  # -------------------------------------------------------------------------
+  idp: []
+  #  - # Human-readable description of this provider.
+  #    description: "My Identity Provider"
+  #
+  #    # OIDC issuer URL (required). The broker fetches the provider's
+  #    # .well-known/openid-configuration from this URL.
+  #    issuer_url: "https://idp.example.com"
+  #
+  #    # OIDC client ID (required). Used to validate the audience claim.
+  #    client_id: "my-client"
+  #
+  #    # JWT validation rules.
+  #    validation:
+  #      # List of claims that must be present in the token.
+  #      # Standard claims: name, given_name, family_name, preferred_username,
+  #      #   nickname, email, email_verified, sub, aud, exp, iat, nbf, jti,
+  #      #   at_hash, groups, roles, client_id, etc.
+  #      claims: [aud, iat, exp, preferred_username, sub]
+  #
+  #      # Expected audience values. The token's `aud` claim must contain
+  #      # at least one of these. Leave empty or set
+  #      # `skip_audience_validation: true` to skip this check.
+  #      aud: []
+  #
+  #      # Bounds for the token's own lifetime (exp - iat).
+  #      # Tokens outside these bounds are rejected.
+  #      token_bounds:
+  #        min: 1m
+  #        max: 43800h
+  #
+  #    # Custom claim name mappings, e.g. {"cognito:groups": "groups"}.
+  #    # custom_claims_mapping: {}
+  #
+  #    # Fetch additional user info from the IDP's userinfo endpoint.
+  #    # user_info:
+  #    #   enabled: false
+  #
+  #    # Max lifetime for NATS JWTs minted from tokens issued by this IDP.
+  #    # max_token_lifetime: 24h
+  #
+  #    # Clock skew tolerance when validating token timestamps.
+  #    # clock_skew: 5m
+  #
+  #    # If true, startup continues even if this IDP's OIDC discovery fails.
+  #    # ignore_setup_error: false
+
+  # -------------------------------------------------------------------------
+  # Role-Based Access Control (RBAC)
+  # Maps authenticated IDP users to NATS permissions via roles and bindings.
+  # -------------------------------------------------------------------------
   rbac:
-    tokenMaxExpiration: 8h
+    # Default maximum expiration for minted NATS JWTs.
+    # Individual role bindings can override this with a shorter or longer value,
+    # but the result is always clamped within `nats.jwt_expiry_bounds`.
+    token_max_expiration: 8h
 
-    # configuration of roles (groups of permissions + limits) that can be attached to
-    # minted NATS user JWTs
-    roles:
-      []
-      # - name: streaming
-      #   permissions:
-      #     sub:
-      #       allow:
-      #         - "$JS.API.>"
-      #         - "_INBOX.>"
-      #     pub:
-      #       allow:
-      #         - "$JS.API.STREAM.CREATE.basic_test_stream"
-      #         - "$JS.API.STREAM.UPDATE.basic_test_stream"
-      #         - "$JS.API.CONSUMER.CREATE.basic_test_stream.basic_test_stream"
-      #         - "$JS.API.CONSUMER.MSG.NEXT.basic_test_stream.basic_test_stream"
-      #     resp:
-      #       max_msgs: 1
-      #       exp:
-      #         max: 1h
+    # Strategy for selecting a role binding when multiple bindings match.
+    #   best_match - the binding with the most matching criteria wins (default).
+    #   strict     - all criteria in a binding must match; fails otherwise.
+    role_binding_matching_strategy: best_match
 
-      #   limits:
-      #     data: 65536
+    # Optional directory to auto-discover NATS user accounts.
+    # The broker scans for file pairs matching:
+    #   <account-name>-id-1.pub  (account public key)
+    #   <account-name>-sk-1.nk   (signing NKey seed)
+    # Discovered accounts are merged with those in `user_accounts`.
+    # auto_accounts_dir: "/secrets"
 
-    # configuration to associate RBAC roles to RBAC accounts
-    role_binding:
-      []
-      # - user_account: APP1
-      #   token_max_expiration: 24h
-      #   match:
-      #     - { claim: aud, value: public }
-      #   roles:
-      #     - streaming
+    # Explicitly defined NATS user accounts.
+    # Each account represents a NATS account that users can be placed into.
+    user_accounts: []
+    #  - name: APP1
+    #    public_key: "AAXXX..."   # Account public key (from *-id-1.pub)
+    #    signing_nkey: '{{ readFile "/secrets/APP1-sk-1.nk" }}'
 
-# service account of the nats-iam-broker pod
+    # Named permission sets that can be assigned via role bindings.
+    roles: []
+    #  - name: streaming
+    #    permissions:
+    #      # Subjects the user is allowed to subscribe to.
+    #      sub:
+    #        allow: ["$JS.API.>", "_INBOX.>"]
+    #        # deny: []
+    #
+    #      # Subjects the user is allowed to publish to.
+    #      pub:
+    #        allow: ["$JS.API.STREAM.CREATE.mystream"]
+    #        # deny: []
+    #
+    #      # Response permissions for request/reply patterns.
+    #      resp:
+    #        max_msgs: 1   # Max messages allowed in a single response
+    #        exp: 1h       # How long a response permission remains valid
+    #
+    #    # NATS account limits applied to the user JWT.
+    #    limits:
+    #      data: 65536     # Max data in bytes
+
+    # Bindings that map IDP token claims to roles and (optionally) a
+    # specific NATS user account.
+    role_binding: []
+    #  - # Target NATS user account name. Must match an entry in
+    #    # `user_accounts` or be auto-discovered via `auto_accounts_dir`.
+    #    user_account: APP1
+    #
+    #    # Override token_max_expiration for this specific binding.
+    #    token_max_expiration: 24h
+    #
+    #    # Match criteria. Each entry tests a claim from the IDP token.
+    #    # With best_match strategy, more matching criteria = higher priority.
+    #    # With strict strategy, ALL criteria must match.
+    #    # A binding with an empty `match` list acts as a fallback.
+    #    match:
+    #      - claim: aud           # JWT claim name to match against
+    #        value: public        # Expected claim value
+    #      # Expression-based matching using expr-lang:
+    #      # - expr: "'admin' in groups"
+    #
+    #    # List of role names to grant when this binding matches.
+    #    roles:
+    #      - streaming
+
+# ---------------------------------------------------------------------------
+# Kubernetes resources
+# ---------------------------------------------------------------------------
+
 serviceAccount:
-  # Specifies whether a service account should be created
+  # Create a dedicated ServiceAccount for the broker pods.
   create: true
-  # Automatically mount a ServiceAccount's API credentials
+  # Automatically mount the ServiceAccount token into the pod.
   automount: true
-  # Annotations to add to the service account
+  # Annotations to add to the ServiceAccount (e.g. for IAM role bindings).
   annotations: {}
-  # The name of the service account to use. If not set and create is true, a name is generated using the fullname template
+  # Override the ServiceAccount name. Defaults to the fullname template.
   name: ""
 
-# Additional annotations to add to the pods
+# Additional annotations applied to every pod in the Deployment.
 podAnnotations: {}
-# Additional labels to add to the pods
+
+# Additional labels applied to every pod in the Deployment.
 podLabels: {}
 
-# Define security context for the pod
-podSecurityContext:
-  {}
-  # fsGroup: 2000
+# Pod-level security context (applies to all containers).
+# Example:
+#   fsGroup: 1000
+#   runAsNonRoot: true
+podSecurityContext: {}
 
-# Define security context for the container
-securityContext:
-  {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+# Container-level security context (applies to the broker container).
+# Example:
+#   readOnlyRootFilesystem: true
+#   runAsUser: 1000
+#   capabilities:
+#     drop: [ALL]
+securityContext: {}
 
-# -- Environment variables for the nats-iam-broker container
-envFrom:
-  []
+# CPU/memory resource requests and limits for the broker container.
+# Example:
+#   requests:
+#     cpu: 100m
+#     memory: 128Mi
+#   limits:
+#     cpu: 500m
+#     memory: 256Mi
+resources: {}
+
+# Kubernetes node selector for pod scheduling.
+nodeSelector: {}
+
+# Tolerations for pod scheduling on tainted nodes.
+tolerations: []
+
+# Affinity rules for pod scheduling (node affinity, pod affinity, etc.).
+affinity: {}
+
+# Inject environment variables from ConfigMaps or Secrets.
+# Useful for providing values to Go template expressions in the config,
+# e.g. {{ env "NATS_URL" }}.
+envFrom: []
   # - secretRef:
   #     name: nats-secrets
   # - configMapRef:
-  #     name: nats-iam-broker-config
+  #     name: nats-config
 
-env:
-  # -- Account name for the IAM service (required)
-  - name: IAM_ACCOUNT_NAME
-    value: "MINT"
+# Individual environment variables for the broker container.
+env: []
+  # - name: NATS_URL
+  #   value: "nats://nats:4222"
+  # - name: SECRET_KEY
+  #   valueFrom:
+  #     secretKeyRef:
+  #       name: my-secret
+  #       key: key
 
-  # -- Service name
-  # defaults to <IAM_ACCOUNT_NAME>-iam-broker-svc
-  - name: IAM_NAME
-    value: ""  
-    
-  # -- Service description
-  # defaults to <IAM_ACCOUNT_NAME> IAM Broker
-  - name: IAM_DESCRIPTION
-    value: ""
-
-  # -- Internal version of this IAM nats-microservice (required)  
-  # 
-  # This can be used, for example, to version deployments of rbac configs
-  # independently of the helm chart version.
-  - name: IAM_VERSION
-    value: "0.1.0"
-
-  # -- Primary Idp Issuer URL (required)
-  - name: IDP_ISSUER_URL 
-    value: "https://sso.ebotmore.com"
-    
-  # -- Primary Idp ClientIds (required)
-  - name: IDP_CLIENT_ID
-    value: "310313383524106453"
-    
-  # -- NATS server URL
-  - name: NATS_URL
-    value: "nats://nats-sand.ebotmore.com:4222"
-    
-  # -- Primary Idp Description
-  - name: IDP_DESCRIPTION
-    value: "Zitadel Identity Provider"
-    
-  # -- Delay before starting service
-  - name: IAM_STARTUP_DELAY
-    value: "10s"
-    
-  # -- CSVs of port-forwards; item format: <ext_host>:<ext_port>:<container_port>
-  - name: IAM_PORT_FORWARDS
-    value: ""
-    
-  # -- Glob for config files
-  - name: IAM_CONFIGS
-    value: "/config/*.yaml"
-    
-  # -- Path to encryption key
-  # defaults to /secrets/<iam_account_name>-enc.xk
-  - name: IAM_SERVICE_XK
-    value: ""
-    
-  # -- Expiration time of minted NATS JWT
-  - name: IAM_JWT_EXP
-    value: "1h15m"
-    
-  # -- Path to signing key
-  - name: IAM_ACCOUNT_SIGNK
-    value: ""  # defaults to /secrets/<iam_account_name>-sk-1.nk
-    
-  # -- Path to user credentials
-  # defaults to /secrets/<iam_account_name>-ac-user.creds
-  - name: IAM_USER_CREDS
-    value: ""
-    
-  # -- CSVs of accounts the IAM service can mint users for
-  - name: APP_AUTO_ACCOUNTS
-    value: ""
-
-# Resource requests and limits for the container
-resources:
-  {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
-
-# Additional volumes on the output Deployment definition.
-volumes:
-  []
+# Additional volumes to mount into the pod.
+# Typically used to mount Kubernetes Secrets containing NATS credentials,
+# signing keys, and encryption keys referenced by `creds_file`,
+# `signing_nkey`, `xkey_seed`, and `auto_accounts_dir`.
+volumes: []
   # - name: nats-secrets
   #   secret:
   #     secretName: nats-secrets
 
-# Additional volumeMounts on the output Deployment definition.
-volumeMounts:
-  []
+# Additional volume mounts for the broker container.
+# Must correspond to entries in `volumes` above.
+volumeMounts: []
   # - name: nats-secrets
-  #   mountPath: /etc/nats/secrets
+  #   mountPath: /secrets
   #   readOnly: true
-
-# Node selector for pod scheduling
-nodeSelector: {}
-
-# Tolerations for pod scheduling
-tolerations: []
-
-# Affinity rules for pod scheduling
-affinity: {}

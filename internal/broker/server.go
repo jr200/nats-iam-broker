@@ -1,54 +1,119 @@
-package server
+package broker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	internal "github.com/jr200/nats-iam-broker/internal"
-	"github.com/nats-io/jwt/v2"
+	"github.com/jr200/nats-iam-broker/internal/logging"
+	"github.com/jr200/nats-iam-broker/internal/metrics"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/micro"
-	"github.com/nats-io/nkeys"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	"go.uber.org/zap"
 )
 
-func Start(configFiles []string, serverOpts *Options) error {
-	ctx := NewServerContext(serverOpts)
-	// This is reads the config from disk on server start. Downside with caching is that if the config
-	// is updated, the service will not pick it up until the service is restarted.
+// Start runs the broker, blocking until an OS interrupt signal is received.
+func Start(configFiles []string, cliOpts *Options, cliFlags map[string]bool) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		internal.WaitForInterrupt()
+		cancel()
+	}()
+
+	return StartWithContext(ctx, configFiles, cliOpts, cliFlags)
+}
+
+// StartWithContext runs the broker, blocking until the given context is cancelled.
+func StartWithContext(ctx context.Context, configFiles []string, cliOpts *Options, cliFlags map[string]bool) error {
 	configManager, err := NewConfigManager(configFiles)
 	if err != nil {
 		return fmt.Errorf("failed to initialize config manager: %v", err)
 	}
 
+	// Merge: defaults <- YAML <- explicit CLI flags
+	serverOpts := MergeOptions(configManager.ServerOptions(), cliOpts, cliFlags)
+
+	// Configure logging from merged options (YAML + CLI overrides)
+	logging.Setup(serverOpts.LogLevel, serverOpts.LogFormat == "human")
+
+	srvCtx := NewServerContext(serverOpts)
+
 	config, err := configManager.GetConfig(make(map[string]interface{}))
 	if err != nil {
-		log.Err(err).Msg("bad configuration")
+		zap.L().Error("bad configuration", zap.Error(err))
 		return err
 	}
 
-	log.Logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
-		return c.Str("name", config.Service.Name)
-	})
+	zap.ReplaceGlobals(zap.L().Named(config.Service.Name))
+
+	// Log available RBAC account names
+	accountNames := make([]string, len(config.Rbac.Accounts))
+	for i, acct := range config.Rbac.Accounts {
+		accountNames[i] = acct.Name
+	}
+	zap.L().Info("available RBAC accounts", zap.Strings("accounts", accountNames))
+
+	// Start metrics server if enabled
+	var m *metrics.Metrics
+	var health *metrics.HealthChecker
+	if serverOpts.MetricsEnabled {
+		m = metrics.New()
+		health = metrics.NewHealthChecker()
+		metricsServer := metrics.NewServer(serverOpts.MetricsPort, health)
+		metricsServer.Start()
+		defer metricsServer.Stop()
+	}
 
 	// Connect to NATS
 	natsOpts := config.natsOptions()
-	natsOpts = append(natsOpts, nats.Name(config.Service.Name))
+	natsOpts = append(natsOpts,
+		nats.Name(config.Service.Name),
+		nats.MaxReconnects(-1),
+		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
+			if health != nil {
+				health.SetNATSConnected(false)
+			}
+			if err != nil {
+				zap.L().Error("NATS disconnected", zap.Error(err))
+			} else {
+				zap.L().Warn("NATS disconnected (graceful)")
+			}
+		}),
+		nats.ReconnectHandler(func(nc *nats.Conn) {
+			if health != nil {
+				health.SetNATSConnected(true)
+			}
+			zap.L().Info("NATS reconnected", zap.String("addr", nc.ConnectedAddr()))
+		}),
+		nats.ClosedHandler(func(_ *nats.Conn) {
+			if health != nil {
+				health.SetNATSConnected(false)
+			}
+			zap.L().Info("NATS connection closed")
+		}),
+		nats.ErrorHandler(func(_ *nats.Conn, sub *nats.Subscription, err error) {
+			if sub != nil {
+				zap.L().Error("NATS async error", zap.String("subject", sub.Subject), zap.Error(err))
+			} else {
+				zap.L().Error("NATS async error", zap.Error(err))
+			}
+		}),
+	)
 
 	natsDrainConnection := func(nc *nats.Conn) {
 		if nc != nil {
 			err := nc.Drain()
 			if err != nil {
-				log.Err(err).Msg("error draining NATS connection")
+				zap.L().Error("error draining NATS connection", zap.Error(err))
 			}
 		}
 	}
 
-	log.Info().Msgf("connecting to %s", config.NATS.URL)
+	zap.L().Info("connecting to NATS", zap.String("url", config.NATS.URL))
 	nc, err := nats.Connect(config.NATS.URL, natsOpts...)
 	if err != nil {
 		return err
@@ -56,157 +121,44 @@ func Start(configFiles []string, serverOpts *Options) error {
 
 	defer natsDrainConnection(nc)
 
-	idpVerifiers, err := NewIdpVerifiers(ctx, config)
+	if health != nil {
+		health.SetNATSConn(nc)
+	}
+
+	idpVerifiers, err := NewIdpVerifiers(srvCtx, config)
 	if err != nil {
 		return err
 	}
 
+	if health != nil {
+		health.SetIDPVerifiersReady(len(idpVerifiers) > 0)
+	}
+
 	auditEventSubject := config.Service.Name + ".evt.audit.account.%s.user.%s.created"
 	//nolint:mnd // 2 is the number of %s placeholders in auditEventSubject
-	log.Info().Msgf("Audit events will be published to: %s", strings.Replace(auditEventSubject, "%s", "*", 2))
+	zap.L().Info("audit events configured", zap.String("subject_pattern", strings.Replace(auditEventSubject, "%s", "*", 2)))
 
-	auth := NewAuthService(ctx, config.Service.Account.SigningNKey.KeyPair, config.serviceEncryptionXkey(), func(request *jwt.AuthorizationRequestClaims) (*jwt.UserClaims, nkeys.KeyPair, *UserAccountInfo, error) {
-		var tokenReq TokenRequest
-		var idpRawJwt string
+	// Build initial live state and config watcher
+	initial := &LiveState{
+		config:        config,
+		configManager: configManager,
+		idpVerifiers:  idpVerifiers,
+		auditSubject:  auditEventSubject,
+	}
+	watcher := NewConfigWatcher(srvCtx, configFiles, initial)
 
-		if ctx.Options.LogSensitive {
-			log.Trace().Msgf("NewAuthService (request): %s", request)
-		}
-
-		if request.ConnectOptions.Token != "" {
-			// Try to parse as JSON token response first
-			if err := json.Unmarshal([]byte(request.ConnectOptions.Token), &tokenReq); err == nil {
-				idpRawJwt = tokenReq.IDToken
-			} else {
-				// If not JSON, treat as raw JWT
-				idpRawJwt = request.ConnectOptions.Token
-			}
+	if serverOpts.WatchConfig {
+		if err := watcher.Start(); err != nil {
+			zap.L().Warn("failed to start config watcher, continuing without hot-reload", zap.Error(err))
 		} else {
-			// Try password field if token is empty
-			if err := json.Unmarshal([]byte(request.ConnectOptions.Password), &tokenReq); err == nil {
-				idpRawJwt = tokenReq.IDToken
-			} else {
-				idpRawJwt = request.ConnectOptions.Password
-			}
+			defer watcher.Stop()
 		}
+	}
 
-		if idpRawJwt == "" {
-			return nil, nil, nil, fmt.Errorf("no valid JWT token found in request")
-		}
+	authCallback := newAuthCallbackWithWatcher(srvCtx, m, nc, watcher)
+	auth := NewAuthService(srvCtx, config.Service.Account.SigningNKey.KeyPair, config.serviceEncryptionXkey(), authCallback, m)
 
-		reqClaims, matchedVerifier, err := runVerification(idpRawJwt, idpVerifiers)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-
-		// Only fetch and append user info if enabled for this IDP
-		if matchedVerifier.config.UserInfo.Enabled {
-			if tokenReq.AccessToken != "" {
-				userInfo, err := matchedVerifier.verifier.GetUserInfo(context.Background(), tokenReq.AccessToken)
-				if err != nil {
-					log.Warn().Err(err).Msg("failed to fetch user info")
-				} else {
-					// Merge user info into claims
-					claims := reqClaims.toMap()
-					for k, v := range userInfo {
-						claims[k] = v
-					}
-					reqClaims.fromMap(claims, matchedVerifier.config.CustomMapping)
-				}
-			} else {
-				log.Debug().Msg("skipping user info fetch - no access token available")
-			}
-		}
-
-		// Merge in client information from the request
-		reqJwtClaims := reqClaims.toMap()
-		reqJwtClaims["client_id"] = request.ClientInformation.User        // Sentinel ID
-		reqJwtClaims["also_known_as"] = request.ClientInformation.NameTag // Sentinel name
-		reqClaims.fromMap(reqJwtClaims, matchedVerifier.config.CustomMapping)
-
-		if ctx.Options.LogSensitive {
-			log.Debug().Msgf("reqClaims: %v", reqClaims.toMap())
-		}
-
-		// Lets render the config with a different mapping:
-		cfgForRequest, err := configManager.GetConfig(reqClaims.toMap())
-		if err != nil {
-			log.Error().Err(err).Msg("error rendering config against idp-jwt")
-			return nil, nil, nil, err
-		}
-		userAccountName, permissions, limits, roleBindingTokenMaxExpiry := cfgForRequest.lookupUserAccount(reqClaims.toMap())
-		userAccountInfo, err := config.lookupAccountInfo(userAccountName)
-		if err != nil {
-			log.Error().Err(err).Msg("error looking up account-info")
-			return nil, nil, nil, err
-		}
-
-		if ctx.Options.LogSensitive {
-			log.Debug().Msgf("userAccountInfo: %v", userAccountInfo)
-		}
-
-		// setup claims for user's nats-jwt
-		claims := jwt.NewUserClaims(request.UserNkey)
-		claims.Audience = userAccountName
-		claims.Name = request.ConnectOptions.Username
-		claims.IssuerAccount = userAccountInfo.PublicKey
-
-		claims.Expires = calculateExpiration(
-			cfgForRequest,    // NatsJwt ExpiryBounds and RBAC TokenMaxExpiry
-			reqClaims.Expiry, // IDP Max Expiry
-			&matchedVerifier.config.ValidationSpec.TokenExpiryBounds, // IDP ValidationSpec
-			&roleBindingTokenMaxExpiry,                               // RoleBinding TokenMaxExpiry
-		)
-		claims.Permissions = *permissions
-		claims.Limits = *limits
-		claims.Tags.Add(fmt.Sprintf("email: %s, name: %s, idp: %s, expires: %s",
-			reqClaims.Email,
-			reqClaims.Name,
-			matchedVerifier.config.Description,
-			time.Unix(claims.Expires, 0).Format(time.RFC3339)))
-
-		// Determine the type of signing key used
-		signingKeyInfo, err := determineSigningKeyType(claims, userAccountInfo.SigningNKey.KeyPair, userAccountInfo)
-		if err != nil {
-			log.Warn().Err(err).Msg("failed to determine signing key type for audit event")
-		}
-
-		// Publish user creation event with detailed information
-		userEvent := map[string]interface{}{
-			"account":          userAccountName,
-			"account_pub_nkey": userAccountInfo.PublicKey,
-			"user_pub_nkey":    request.UserNkey,
-			"username":         request.ConnectOptions.Username,
-			"email":            reqClaims.Email,
-			"name":             reqClaims.Name,
-			"idp":              matchedVerifier.config.Description,
-			"created_at":       time.Now().Format(time.RFC3339),
-			"expires_at":       time.Unix(claims.Expires, 0).Format(time.RFC3339),
-			"permissions":      permissions,
-			"limits":           limits,
-			"signing_account":  config.Service.Account.Name,
-		}
-
-		// Add signing key information if available
-		if signingKeyInfo != nil {
-			userEvent["signing_key_type"] = signingKeyInfo.Type
-			userEvent["signing_key_pub_nkey"] = signingKeyInfo.PublicKey
-		}
-
-		eventJSON, err := json.Marshal(userEvent)
-		if err != nil {
-			log.Warn().Err(err).Msg("failed to marshal user creation event")
-		} else {
-			err = nc.Publish(fmt.Sprintf(auditEventSubject, userAccountName, request.UserNkey), eventJSON)
-			if err != nil {
-				log.Warn().Err(err).Msg("failed to publish user creation event")
-			}
-		}
-
-		return claims, userAccountInfo.SigningNKey.KeyPair, userAccountInfo, nil
-	})
-
-	log.Info().Msgf("Starting service v%s", config.Service.Version)
+	zap.L().Info("starting service", zap.String("version", config.Service.Version))
 
 	_, err = micro.AddService(nc, micro.Config{
 		Name:        config.Service.Name,
@@ -221,12 +173,16 @@ func Start(configFiles []string, serverOpts *Options) error {
 		return err
 	}
 
-	log.Info().Msgf("Listening to $SYS.REQ.USER.AUTH on %s", nc.ConnectedAddr())
+	if health != nil {
+		health.SetServiceRegistered(true)
+	}
 
-	// Block and wait for interrupt signal
-	internal.WaitForInterrupt()
+	zap.L().Info("listening for auth requests", zap.String("subject", "$SYS.REQ.USER.AUTH"), zap.String("addr", nc.ConnectedAddr()))
 
-	log.Info().Msg("Exiting...")
+	// Block until context is cancelled
+	<-ctx.Done()
+
+	zap.L().Info("exiting")
 	return nil
 }
 
@@ -244,7 +200,10 @@ func calculateExpiration(cfg *Config, idpProvidedExpiry int64, idpValidationExpi
 	// 1. Start with IDP provided expiry
 	expiry := idpProvidedExpiry
 
-	// TODO: Is it allowed to have a token that is higher than the IDP provided max expiry?
+	// The IDP-provided expiry is the absolute upper bound. Downstream overrides
+	// (role bindings, RBAC) may shorten the token lifetime but never extend it
+	// beyond what the IDP originally granted.
+	idpCeiling := idpProvidedExpiry
 
 	// 2. Apply idpValidation bounds
 	if idpValidationExpiry != nil {
@@ -270,12 +229,19 @@ func calculateExpiration(cfg *Config, idpProvidedExpiry int64, idpValidationExpi
 		}
 	}
 
-	// Make sure that the expiry is within the bounds
+	// 5. Make sure that the expiry is within the NATS token bounds
 	if expiry < now.Add(cfg.NATS.TokenExpiryBounds.Min.Duration).Unix() {
 		expiry = now.Add(cfg.NATS.TokenExpiryBounds.Min.Duration).Unix()
 	}
 	if expiry > now.Add(cfg.NATS.TokenExpiryBounds.Max.Duration).Unix() {
 		expiry = now.Add(cfg.NATS.TokenExpiryBounds.Max.Duration).Unix()
+	}
+
+	// 6. Enforce the IDP-provided expiry as the absolute ceiling. No override
+	// (role binding, RBAC, or NATS bounds) may extend the token beyond the
+	// lifetime the IDP originally granted.
+	if expiry > idpCeiling {
+		expiry = idpCeiling
 	}
 
 	return expiry

@@ -1,0 +1,49 @@
+---
+title: "JWT Claims"
+---
+
+When a user connects, the broker builds a context map from the validated IdP JWT token. This context is used for role binding evaluation, template rendering, and expression matching. The following fields may be present.
+
+## Standard OIDC Claims
+
+These are extracted from the IdP JWT token automatically:
+
+| Claim Key | Type | Description |
+| --------- | ---- | ----------- |
+| `name` | string | Full name |
+| `given_name` | string | Given/first name |
+| `family_name` | string | Family/last name |
+| `preferred_username` | string | Preferred username |
+| `nickname` | string | Nickname |
+| `email` | string | Email address |
+| `email_verified` | bool | Whether email is verified |
+| `picture` | string | Profile picture URL |
+| `gender` | string | Gender |
+| `zoneinfo` | string | Time zone info |
+| `locale` | string | Locale |
+| `sub` | string | Subject identifier (unique user ID) |
+| `aud` | []string | Audience (normalized to array) |
+| `exp` | int64 | Expiry timestamp (unix) |
+| `iat` | int64 | Issued-at timestamp (unix) |
+| `nbf` | int64 | Not-before timestamp (unix) |
+| `jti` | string | JWT ID |
+| `at_hash` | string | Access token hash |
+| `groups` | string or []string | Group memberships |
+| `roles` | string or []string | Role assignments |
+
+## Broker-Injected Fields
+
+These are added by the broker from the NATS authorization request:
+
+| Claim Key | Description |
+| --------- | ----------- |
+| `client_id` | NATS client sentinel ID (`ClientInformation.User`) |
+| `also_known_as` | NATS client sentinel name (`ClientInformation.NameTag`) |
+
+## Custom Claims
+
+Any claim in the IdP JWT that is not in the standard list above is available in the context under its original key name. If `custom_mapping` is configured on the IDP, the claim is available under the mapped key instead. See [Custom Claim Mapping](custom-claims.qmd).
+
+## UserInfo Claims
+
+When `idp.user_info.enabled` is `true` and the client provides an `access_token`, the broker calls the OIDC UserInfo endpoint and merges all returned fields into the context. The available fields are provider-dependent but commonly include `phone_number`, `address`, and additional profile data.

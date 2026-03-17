@@ -1,0 +1,65 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "nats-iam-broker"
+  description: "Decentralised Auth Callout for NATS"
+  repo-url: https://github.com/jr200/nats-iam-broker
+  repo-actions: [issue, source]
+
+  navbar:
+    background: primary
+    left:
+      - href: index.qmd
+        text: Home
+      - href: getting-started.qmd
+        text: Getting Started
+      - href: examples.qmd
+        text: How It Works
+      - text: Configuration
+        menu:
+          - href: configuration.qmd
+            text: Reference
+          - href: claims.qmd
+            text: JWT Claims
+          - href: role-binding.qmd
+            text: Role Binding & Matching
+          - href: custom-claims.qmd
+            text: Custom Claim Mapping
+      - href: metrics.qmd
+        text: Metrics
+      - href: helm.qmd
+        text: Helm Chart
+    right:
+      - icon: github
+        href: https://github.com/jr200/nats-iam-broker
+
+  sidebar:
+    - title: "Guide"
+      style: docked
+      contents:
+        - index.qmd
+        - getting-started.qmd
+        - text: "How It Works"
+          href: examples.qmd
+        - section: "Configuration"
+          contents:
+            - configuration.qmd
+            - claims.qmd
+            - role-binding.qmd
+            - custom-claims.qmd
+        - metrics.qmd
+        - helm.qmd
+        - references.qmd
+
+  page-footer:
+    center: "nats-iam-broker __VERSION__ - MIT License"
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    code-copy: true
+    code-overflow: wrap

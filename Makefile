@@ -16,15 +16,6 @@ else
 endif
 export GOARCH ?= $(TARGET_ARCH_LOCAL)
 
-# get docker tag
-ifeq ($(GOARCH),amd64)
-	LATEST_TAG?=latest
-	OIDC_SERVER_ARCH?=''
-else
-	LATEST_TAG?=latest-$(GOARCH)
-	OIDC_SERVER_ARCH?='-arm64'
-endif
-
 # get target os
 LOCAL_OS := $(shell uname -s)
 ifeq ($(LOCAL_OS),Linux)
@@ -78,6 +69,19 @@ test:
 	go test -timeout=10m ./...
 
 ################################################################################
+# Target: test-integration                                                     #
+################################################################################
+.PHONY: test-integration
+test-integration:
+	go test -tags=integration -timeout=5m -count=1 ./tests/integration/...
+
+################################################################################
+# Target: test-all                                                             #
+################################################################################
+.PHONY: test-all
+test-all: test test-integration
+
+################################################################################
 # Target: test-race                                                            #
 ################################################################################
 .PHONY: test-race
@@ -115,12 +119,8 @@ build:
 	go mod download
 
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) \
-	go build -o build/nats-iam-broker-$(GOOS)-$(GOARCH) -gcflags "all=-N -l" -ldflags '-extldflags "-static"' \
-	cmd/nats-iam-broker/main.go
-
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) \
-	go build -o build/test-client-$(GOOS)-$(GOARCH) -gcflags "all=-N -l" -ldflags '-extldflags "-static"' \
-	cmd/test-client/main.go
+	go build -o build/nats-iam-broker-$(GOOS)-$(GOARCH) -ldflags '-extldflags "-static"' \
+	./cmd/nats-iam-broker/
 
 ################################################################################
 # Target: clean                                                                #
@@ -131,6 +131,29 @@ clean:
 	rm -rf ./build
 	rm -f coverage.out
 	go clean -testcache
+
+GIT_VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
+
+################################################################################
+# Target: docs-generate-config                                                 #
+################################################################################
+.PHONY: docs-generate-config
+docs-generate-config:
+	sed 's/__VERSION__/$(GIT_VERSION)/' docs/site/_quarto.yml.tpl > docs/site/_quarto.yml
+
+################################################################################
+# Target: docs-preview                                                         #
+################################################################################
+.PHONY: docs-preview
+docs-preview: docs-generate-config
+	cd docs/site && uv run quarto preview
+
+################################################################################
+# Target: docs-render                                                          #
+################################################################################
+.PHONY: docs-render
+docs-render: docs-generate-config
+	cd docs/site && uv run quarto render
 
 ################################################################################
 # Target: docker-offical-build                                                 #
@@ -143,20 +166,6 @@ docker-offical-build:
 		--build-arg BUILD_OS=linux \
 		--build-arg BUILD_ARCH=$(GOARCH) \
 		-t ghcr.io/jr200/nats-iam-broker:local \
-		.
-
-################################################################################
-# Target: docker-example-build                                                 #
-################################################################################
-.PHONY: docker-example-build
-docker-example-build:
-	echo GOARCH=$(GOARCH)
-	docker build \
-		-f docker/Dockerfile.example \
-		--build-arg BUILD_OS=linux \
-		--build-arg BUILD_ARCH=$(GOARCH) \
-		--build-arg OIDC_SERVER_ARCH=$(OIDC_SERVER_ARCH) \
-		-t ghcr.io/jr200/nats-iam-broker:debug \
 		.
 
 ################################################################################
@@ -197,30 +206,3 @@ chart-dry-run:
 		--debug \
 		charts/nats-iam-broker
 
-################################################################################
-# Target: example-shell                                                        #
-################################################################################
-.PHONY: example-shell
-example-shell: docker-example-build
-	docker run --rm -it --entrypoint bash ghcr.io/jr200/nats-iam-broker:debug
-
-################################################################################
-# Target: example-mock                                                        #
-################################################################################
-.PHONY: example-mock
-example-mock: docker-example-build
-	docker run --network=host --rm --entrypoint examples/mock/run.sh ghcr.io/jr200/nats-iam-broker:debug -log-human -log=info
-
-################################################################################
-# Target: example-basic                                                        #
-################################################################################
-.PHONY: example-basic
-example-basic: docker-example-build
-	docker run --rm --entrypoint examples/basic/run.sh ghcr.io/jr200/nats-iam-broker:debug -log-human -log=info
-
-################################################################################
-# Target: example-rgb_org                                                      #
-################################################################################
-.PHONY: example-rgb_org
-example-rgb_org: docker-example-build
-	docker run --rm --entrypoint examples/rgb_org/run.sh ghcr.io/jr200/nats-iam-broker:debug -log-human -log=info
