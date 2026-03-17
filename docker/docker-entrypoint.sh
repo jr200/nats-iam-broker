@@ -38,6 +38,16 @@ if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
     exit 0
 fi
 
+# If the first argument is a known subcommand (serve, decrypt, version),
+# pass through directly to the binary without the legacy entrypoint logic.
+case "${1:-}" in
+    serve|decrypt|version)
+        echo "[CMD]" "nats-iam-broker" "$@"
+        exec nats-iam-broker "$@"
+        ;;
+esac
+
+# Legacy entrypoint: env-var driven configuration for docker-compose usage
 if [ -z "${IAM_ACCOUNT_NAME}" ] || [ -z "${IAM_VERSION}" ]; then
     echo "Error: Required environment variables must be set"
     echo "Run with --help for more information"
