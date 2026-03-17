@@ -1,0 +1,6 @@
+title: git-tag
+author: jr200
+version: 0.1.0
+contributes:
+  shortcodes:
+    - git-tag.lua

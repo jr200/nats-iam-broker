@@ -43,6 +43,4 @@ run/
 
 .env.local
 
-# Generated quarto config (built from _quarto.yml.tpl)
-docs/site/_quarto.yml
 /nats-iam-broker

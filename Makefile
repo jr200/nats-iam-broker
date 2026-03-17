@@ -132,20 +132,11 @@ clean:
 	rm -f coverage.out
 	go clean -testcache
 
-GIT_VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
-
-################################################################################
-# Target: docs-generate-config                                                 #
-################################################################################
-.PHONY: docs-generate-config
-docs-generate-config:
-	sed 's/__VERSION__/$(GIT_VERSION)/' docs/site/_quarto.yml.tpl > docs/site/_quarto.yml
-
 ################################################################################
 # Target: docs-preview                                                         #
 ################################################################################
 .PHONY: docs-preview
-docs-preview: docs-generate-config
+docs-preview:
 	cd docs/site && uv run quarto preview
 
 ################################################################################

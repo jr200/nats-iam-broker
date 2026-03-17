@@ -54,7 +54,7 @@ website:
         - references.qmd
 
   page-footer:
-    center: "nats-iam-broker __VERSION__ - MIT License"
+    center: "nats-iam-broker {{< git-tag >}} - MIT License"
 
 format:
   html:
