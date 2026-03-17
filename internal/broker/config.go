@@ -2,6 +2,7 @@ package broker
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -161,7 +162,7 @@ func NewConfigManager(files []string) (*ConfigManager, error) {
 	// Template expressions haven't been rendered yet, so parse failures for
 	// templated values (NKey, Duration) are expected and logged at Debug level.
 	setConfigParsePhase(configPhaseInitial)
-	if err := yaml.Unmarshal([]byte(merged), &baseConfig); err != nil {
+	if err := yaml.UnmarshalWithOptions([]byte(merged), &baseConfig, yaml.DisallowUnknownField()); err != nil {
 		setConfigParsePhase(configPhaseRender)
 		return nil, improveYAMLErrorMessage(err)
 	}
@@ -213,7 +214,7 @@ func (cm *ConfigManager) GetConfig(mappings map[string]interface{}) (*Config, er
 
 	// Create a temporary config to hold rendered values
 	var tempCfg Config
-	if err := yaml.Unmarshal([]byte(renderedYAML), &tempCfg); err != nil {
+	if err := yaml.UnmarshalWithOptions([]byte(renderedYAML), &tempCfg, yaml.DisallowUnknownField()); err != nil {
 		return nil, improveYAMLErrorMessage(err)
 	}
 
@@ -279,6 +280,20 @@ func (cm *ConfigManager) GetConfig(mappings map[string]interface{}) (*Config, er
 			return nil, fmt.Errorf("%s", strings.Join(errorMessages, ", "))
 		}
 		return nil, err
+	}
+
+	// Warn about role bindings with missing account or roles
+	for i, rb := range cfg.Rbac.RoleBinding {
+		if rb.Account == "" {
+			zap.L().Warn("role binding has empty 'user_account' — auth requests matching this binding will fail",
+				zap.Int("binding_index", i),
+				zap.Int("match_criteria", len(rb.Match)))
+		}
+		if len(rb.Roles) == 0 {
+			zap.L().Warn("role binding has no 'roles' assigned — matched users will get empty permissions",
+				zap.Int("binding_index", i),
+				zap.String("user_account", rb.Account))
+		}
 	}
 
 	// Attach shared expression cache for role binding evaluation
@@ -425,6 +440,17 @@ func (v *NKey) UnmarshalYAML(unmarshal func(interface{}) error) error {
 // Helper function to improve YAML unmarshaling error messages
 func improveYAMLErrorMessage(err error) error {
 	errMsg := err.Error()
+
+	// Check for unknown field errors (from DisallowUnknownField)
+	var unknownFieldErr *yaml.UnknownFieldError
+	if errors.As(err, &unknownFieldErr) {
+		return fmt.Errorf("YAML configuration error: %w\n\n"+
+			"This field is not recognized. Common causes:\n"+
+			"  - Incorrect indentation (e.g. a field nested inside 'match' that belongs on the role-binding level)\n"+
+			"  - Typo in the field name\n"+
+			"  - Using camelCase instead of snake_case (e.g. 'tokenMaxExpiration' should be 'token_max_expiration')\n"+
+			"Check the indentation and field names in ALL your config files.", err)
+	}
 
 	// Check if it's an unmarshaling error
 	if !strings.Contains(errMsg, "unmarshal") {

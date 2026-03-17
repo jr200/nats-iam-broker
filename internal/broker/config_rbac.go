@@ -374,6 +374,7 @@ func (c *Config) lookupUserAccount(context map[string]interface{}) (string, *jwt
 	zap.L().Debug("selected role binding using best_match strategy",
 		zap.Int("matches", bestMatch.matches),
 		zap.Int("criteria_count", bestMatch.numMatchCriteria),
+		zap.String("account", bestMatch.account),
 		zap.String("role_binding", bestMatch.roleBindingName),
 		zap.Strings("matched_on", bestMatch.matchedOn))
 

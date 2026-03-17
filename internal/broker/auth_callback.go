@@ -179,9 +179,21 @@ func buildUserClaims(
 		return nil, nil, nil, metrics.StatusDenied, err
 	}
 
+	if userAccountName == "" {
+		zap.L().Error("role binding matched but account field is empty — check the role-binding configuration for a missing or empty 'account' field")
+		return nil, nil, nil, metrics.StatusError, fmt.Errorf("matched role binding has empty account name — ensure all role-bindings specify an 'account'")
+	}
+
 	userAccountInfo, err := config.lookupAccountInfo(userAccountName)
 	if err != nil {
-		zap.L().Error("error looking up account-info", zap.Error(err))
+		availableAccounts := make([]string, 0, len(config.Rbac.Accounts))
+		for _, acinfo := range config.Rbac.Accounts {
+			availableAccounts = append(availableAccounts, acinfo.Name)
+		}
+		zap.L().Error("error looking up account-info",
+			zap.String("requested_account", userAccountName),
+			zap.Strings("available_accounts", availableAccounts),
+			zap.Error(err))
 		return nil, nil, nil, metrics.StatusError, err
 	}
 
