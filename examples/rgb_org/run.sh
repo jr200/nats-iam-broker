@@ -5,7 +5,8 @@ SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)"
 source "${SCRIPT_DIR}"/../../scripts/nats-toolkit.sh
 
 # bootstrap a new NATS server
-create_new_nats_config "nats://localhost:4222" rgb_org
+NATS_PORT=${NATS_PORT:-4222}
+create_new_nats_config "nats://localhost:${NATS_PORT}" rgb_org
 start_nats
 
 # create accounts/users
@@ -22,6 +23,7 @@ nsc push -A
 
 # debug: save system_account creds for inspection
 nats context save \
+    --server="nats://localhost:${NATS_PORT}" \
     --nsc=nsc://rgb_org/SYS/sys \
     --description "system account" \
     --select \

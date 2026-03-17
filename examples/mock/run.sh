@@ -9,7 +9,8 @@ echo starting OIDC-SERVER
 oidc-server start -c /usr/src/app/oidc-server/config.yaml -p 5550 &
 
 # bootstrap a new NATS server with operator 'mock'
-create_new_nats_config "nats://localhost:4222" mock
+NATS_PORT=${NATS_PORT:-4222}
+create_new_nats_config "nats://localhost:${NATS_PORT}" mock
 start_nats
 
 # create accounts/users
@@ -18,6 +19,7 @@ source "${SCRIPT_DIR}"/mock_initial_setup.sh
 
 # debug: save system_account creds for inspection
 nats context save \
+    --server="nats://localhost:${NATS_PORT}" \
     --nsc=nsc://mock/SYS/sys \
     --description "system account" \
     --select \

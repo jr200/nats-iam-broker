@@ -72,6 +72,7 @@ function create_user() {
 
   save_name=$(echo "${department}_${account}_${user}" | awk '{print tolower($0)}')
   nats context save \
+      --server="nats://localhost:${NATS_PORT:-4222}" \
       --creds="${path}/user-${user}.creds" \
       --description "${department}: ${account}/${user}" \
       "${save_name}"

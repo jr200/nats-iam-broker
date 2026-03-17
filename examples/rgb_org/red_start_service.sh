@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export NATS_URL="nats://localhost:4222"
+export NATS_URL="nats://localhost:${NATS_PORT:-4222}"
 
 export SECRET_STORE="/usr/src/app/secrets/red"
 export CONFIG_DIR="/usr/src/app/configs"

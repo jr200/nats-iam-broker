@@ -5,7 +5,8 @@ SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)"
 source "${SCRIPT_DIR}"/../../scripts/nats-toolkit.sh
 
 # bootstrap a new NATS server with operator 'basic'
-create_new_nats_config "nats://localhost:4222" basic
+NATS_PORT=${NATS_PORT:-4222}
+create_new_nats_config "nats://localhost:${NATS_PORT}" basic
 start_nats
 
 # create accounts/users
@@ -14,6 +15,7 @@ source "${SCRIPT_DIR}"/basic_initial_setup.sh
 
 # debug: save system_account creds for inspection
 nats context save \
+    --server="nats://localhost:${NATS_PORT}" \
     --nsc=nsc://basic/SYS/sys \
     --description "system account" \
     --select \

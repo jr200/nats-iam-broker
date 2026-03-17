@@ -4,6 +4,9 @@
 function create_new_nats_config() {
   local nats_url=$1
   local operator=$2
+  local nats_port=${NATS_PORT:-4222}
+  local nats_http_port=${NATS_HTTP_PORT:-8222}
+  local nats_ws_port=${NATS_WS_PORT:-8080}
   mkdir -p /usr/src/app/jsdata
 
   nsc add operator --generate-signing-key --sys --name "${operator}"
@@ -28,14 +31,15 @@ function create_new_nats_config() {
   logtime: true
   debug: false
   trace: false
-  http_port: 8222
+  port: ${nats_port}
+  http_port: ${nats_http_port}
   jetstream {
       store_dir: /usr/src/app/jsdata
       max_mem: 32M
       max_file: 32M
   }
   websocket: {
-    port: 8080
+    port: ${nats_ws_port}
     no_tls: true
   }
   include resolver.conf

@@ -2,7 +2,7 @@
 
 SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 
-export NATS_URL="nats://localhost:4222"
+export NATS_URL="nats://localhost:${NATS_PORT:-4222}"
 export SECRET_STORE="/usr/src/app/secrets/mock"
 CONFIG_DIR="/usr/src/app/configs"
 

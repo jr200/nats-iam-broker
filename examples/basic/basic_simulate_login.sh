@@ -4,7 +4,7 @@ SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}"/../scripts/idp-oidctest-toolkit.sh
 
-NATS_URL="nats://localhost:4222"
+NATS_URL="nats://localhost:${NATS_PORT:-4222}"
 SECRET_STORE="/usr/src/app/secrets/basic"
 
 sleep 1

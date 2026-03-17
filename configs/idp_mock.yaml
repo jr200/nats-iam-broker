@@ -12,6 +12,6 @@ idp:
         - sub
       aud:
         - mockclientid
-      exp:
+      token_bounds:
         min: 1m0s
         max: 2h

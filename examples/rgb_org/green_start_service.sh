@@ -2,7 +2,7 @@
 
 SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)"
 
-export NATS_URL="nats://localhost:4222"
+export NATS_URL="nats://localhost:${NATS_PORT:-4222}"
 
 export SECRET_STORE="/usr/src/app/secrets/green"
 CONFIG_DIR="/usr/src/app/configs"
