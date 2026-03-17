@@ -4,6 +4,12 @@ const DefaultMetricsPort = 8080
 
 // Options holds all configuration options for the server
 type Options struct {
+	// LogLevel sets the log level: disabled, panic, fatal, error, warn, info, debug, trace
+	LogLevel string `yaml:"log_level"`
+
+	// LogFormat sets the log output format: "json" or "human"
+	LogFormat string `yaml:"log_format"`
+
 	// LogSensitive enables logging of sensitive information (for debugging)
 	LogSensitive bool `yaml:"log_sensitive"`
 
@@ -35,6 +41,8 @@ func NewServerContext(opts *Options) *Context {
 // DefaultServerOptions returns a server.Options instance with default values
 func DefaultServerOptions() *Options {
 	return &Options{
+		LogLevel:       "info",
+		LogFormat:      "json",
 		LogSensitive:   false,
 		MetricsEnabled: false,
 		MetricsPort:    DefaultMetricsPort,
@@ -48,7 +56,13 @@ func DefaultServerOptions() *Options {
 func MergeOptions(yamlOpts Options, cliOpts *Options, cliFlags map[string]bool) *Options {
 	merged := DefaultServerOptions()
 
-	// Apply YAML values
+	// Apply YAML values (non-zero values override defaults)
+	if yamlOpts.LogLevel != "" {
+		merged.LogLevel = yamlOpts.LogLevel
+	}
+	if yamlOpts.LogFormat != "" {
+		merged.LogFormat = yamlOpts.LogFormat
+	}
 	if yamlOpts.LogSensitive {
 		merged.LogSensitive = true
 	}
@@ -63,6 +77,13 @@ func MergeOptions(yamlOpts Options, cliOpts *Options, cliFlags map[string]bool) 
 	}
 
 	// CLI flags override everything (only if explicitly set)
+	if cliFlags["log"] {
+		merged.LogLevel = cliOpts.LogLevel
+	}
+	if cliFlags["log-human"] {
+		// -log-human flag maps to LogFormat
+		merged.LogFormat = cliOpts.LogFormat
+	}
 	if cliFlags["log-sensitive"] {
 		merged.LogSensitive = cliOpts.LogSensitive
 	}

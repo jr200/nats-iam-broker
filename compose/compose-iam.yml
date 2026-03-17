@@ -22,8 +22,7 @@ services:
       IDP_ISSUER_URL: "http://localhost:8888"
       IDP_CLIENT_ID: "311866328405311492"
 
-      # APP public and signing keys
-      APP_AUTO_ACCOUNTS: MYAPP
+      # User accounts are auto-discovered from /secrets via auto_accounts_dir in 30-rbac.yaml
 
 networks:
   infra-public:

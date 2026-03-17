@@ -6,6 +6,7 @@ import (
 	"time"
 
 	internal "github.com/jr200/nats-iam-broker/internal"
+	"github.com/jr200/nats-iam-broker/internal/logging"
 	"github.com/jr200/nats-iam-broker/internal/metrics"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/micro"
@@ -20,6 +21,10 @@ func Start(configFiles []string, cliOpts *Options, cliFlags map[string]bool) err
 
 	// Merge: defaults <- YAML <- explicit CLI flags
 	serverOpts := MergeOptions(configManager.ServerOptions(), cliOpts, cliFlags)
+
+	// Configure logging from merged options (YAML + CLI overrides)
+	logging.Setup(serverOpts.LogLevel, serverOpts.LogFormat == "human")
+
 	ctx := NewServerContext(serverOpts)
 
 	config, err := configManager.GetConfig(make(map[string]interface{}))

@@ -1,4 +1,4 @@
-{{- if .Values.metrics.enabled }}
+{{- if .Values.server.metrics }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -8,7 +8,7 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: {{ .Values.metrics.port }}
+    - port: {{ .Values.server.metrics_port }}
       targetPort: metrics
       protocol: TCP
       name: metrics

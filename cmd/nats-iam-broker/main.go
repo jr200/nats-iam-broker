@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/jr200/nats-iam-broker/internal/broker"
-	"github.com/jr200/nats-iam-broker/internal/logging"
 	"go.uber.org/zap"
 )
 
@@ -47,6 +46,14 @@ func parseFlags() ([]string, map[string]bool) {
 	flag.BoolVar(&serverOpts.WatchConfig, "watch", false, "enable hot-reload of config files via file watching")
 	flag.Parse()
 
+	// Map CLI flag values into the Options struct for MergeOptions
+	serverOpts.LogLevel = logLevel
+	if logHumanReadable {
+		serverOpts.LogFormat = "human"
+	} else {
+		serverOpts.LogFormat = "json"
+	}
+
 	// Collect which flags were explicitly set on the command line
 	cliFlags := make(map[string]bool)
 	flag.Visit(func(f *flag.Flag) {
@@ -61,8 +68,6 @@ func parseFlags() ([]string, map[string]bool) {
 		fmt.Fprintln(w, "")
 		os.Exit(1)
 	}
-
-	logging.Setup(logLevel, logHumanReadable)
 
 	return configFiles, cliFlags
 }

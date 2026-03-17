@@ -10,14 +10,14 @@ nats:
     # max: 10s
 
 service:
-  name: '{{ env "SERVICE_NAME" }}'
-  version: '{{ env "SERVICE_VERSION" }}'
-  description: '{{ env "SERVICE_DESC" }}'
-  creds_file: '{{ expandEnv (env "SERVICE_USER_CREDS") }}'
+  name: '{{ env "IAM_NAME" }}'
+  version: '{{ env "IAM_VERSION" }}'
+  description: '{{ env "IAM_DESCRIPTION" }}'
+  creds_file: '{{ expandEnv (env "IAM_USER_CREDS") }}'
 
   account:
-    name: '{{ env "NATS_ACCOUNT" }}'
-    signing_nkey: '{{ readFile (expandEnv (env "SERVICE_ACCT_SIGNK")) }}'
+    name: '{{ env "IAM_ACCOUNT_NAME" }}'
+    signing_nkey: '{{ readFile (expandEnv (env "IAM_ACCOUNT_SIGNK")) }}'
     encryption:
       enabled: true
-      xkey_secret: '{{ readNthLine 1 (expandEnv (env "SERVICE_ACCT_XK")) }}'
+      xkey_secret: '{{ readNthLine 1 (expandEnv (env "IAM_SERVICE_XK")) }}'

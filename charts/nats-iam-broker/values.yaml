@@ -1,18 +1,13 @@
 # Default values for nats-iam-broker.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
-
-# Enable or disable debug mode for development
-devDebug: false
 
 # Number of replicas for the deployment
 replicaCount: 1
 
 image:
-  #  The Docker image repository
+  # The Docker image repository
   repository: ghcr.io/jr200/nats-iam-broker
   # The image pull policy (Always, IfNotPresent, Never)
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
 
@@ -22,204 +17,115 @@ nameOverride: ""
 # Override the full name of the chart
 fullnameOverride: ""
 
-logging:
-  json: false # Set to true to enable JSON logging
-  level: info # Set logging level: error, warn, info, debug, trace
-
-watch:
-  enabled: false # Set to true to enable hot-reload of config files via file watching
-
-metrics:
-  enabled: false # Set to true to enable Prometheus metrics endpoint
-  port: 8080 # Port for the metrics HTTP server
+# ---------------------------------------------------------------------------
+# Server operational settings
+# These are rendered into the config file's `server:` section
+# and also control deployment args, ports, and probes.
+# ---------------------------------------------------------------------------
+server:
+  log_level: info        # disabled, panic, fatal, error, warn, info, debug, trace
+  log_format: json       # json or human
+  log_sensitive: false   # enable sensitive logging (for debugging)
+  metrics: false         # enable Prometheus metrics endpoint
+  metrics_port: 8080     # port for the metrics HTTP server
+  watch: false           # enable hot-reload of config files via file watching
   serviceMonitor:
-    enabled: false # Set to true to create a Prometheus ServiceMonitor resource
-    interval: 30s # Scrape interval
-    labels: {} # Additional labels for the ServiceMonitor
+    enabled: false       # create a Prometheus ServiceMonitor resource
+    interval: 30s        # scrape interval
+    labels: {}           # additional labels for the ServiceMonitor
 
+# ---------------------------------------------------------------------------
+# Application configuration
+# Rendered as a ConfigMap and mounted as /config/config.yaml
+# ---------------------------------------------------------------------------
 config:
-  # role-based access control configuration section
+  nats:
+    url: "nats://nats:4222"
+    token_bounds:
+      min: 1m
+      max: 24h
+
+  service:
+    name: ""          # required
+    version: "0.1.0"  # required (semver)
+    description: ""   # required
+    creds_file: "/secrets/user.creds"
+    account:
+      name: ""        # required
+      # Use Go template expressions for secrets read at runtime:
+      #   signing_nkey: '{{ readFile "/secrets/signing.nk" }}'
+      signing_nkey: ""
+      encryption:
+        enabled: true
+        # xkey_secret: '{{ readNthLine 1 "/secrets/enc.xk" }}'
+        xkey_secret: ""
+
+  idp: []
+  #  - description: "My Identity Provider"
+  #    issuer_url: ""   # required
+  #    client_id: ""    # required
+  #    validation:
+  #      claims: [aud, iat, exp, preferred_username, sub]
+  #      aud: []
+  #      token_bounds:
+  #        min: 1m
+  #        max: 43800h
+
   rbac:
-    tokenMaxExpiration: 8h
+    token_max_expiration: 8h
+    role_binding_matching_strategy: best_match
+    # auto_accounts_dir: "/secrets"  # optional: scan directory for *-id-1.pub / *-sk-1.nk pairs
+    user_accounts: []
+    roles: []
+    #  - name: streaming
+    #    permissions:
+    #      sub:
+    #        allow: ["$JS.API.>", "_INBOX.>"]
+    #      pub:
+    #        allow: ["$JS.API.STREAM.CREATE.mystream"]
+    #      resp:
+    #        max_msgs: 1
+    #        exp: 1h
+    #    limits:
+    #      data: 65536
+    role_binding: []
+    #  - user_account: APP1
+    #    token_max_expiration: 24h
+    #    match:
+    #      - { claim: aud, value: public }
+    #    roles:
+    #      - streaming
 
-    # configuration of roles (groups of permissions + limits) that can be attached to
-    # minted NATS user JWTs
-    roles:
-      []
-      # - name: streaming
-      #   permissions:
-      #     sub:
-      #       allow:
-      #         - "$JS.API.>"
-      #         - "_INBOX.>"
-      #     pub:
-      #       allow:
-      #         - "$JS.API.STREAM.CREATE.basic_test_stream"
-      #         - "$JS.API.STREAM.UPDATE.basic_test_stream"
-      #         - "$JS.API.CONSUMER.CREATE.basic_test_stream.basic_test_stream"
-      #         - "$JS.API.CONSUMER.MSG.NEXT.basic_test_stream.basic_test_stream"
-      #     resp:
-      #       max_msgs: 1
-      #       exp:
-      #         max: 1h
-
-      #   limits:
-      #     data: 65536
-
-    # configuration to associate RBAC roles to RBAC accounts
-    role_binding:
-      []
-      # - user_account: APP1
-      #   token_max_expiration: 24h
-      #   match:
-      #     - { claim: aud, value: public }
-      #   roles:
-      #     - streaming
-
-# service account of the nats-iam-broker pod
+# ---------------------------------------------------------------------------
+# Kubernetes resources
+# ---------------------------------------------------------------------------
 serviceAccount:
-  # Specifies whether a service account should be created
   create: true
-  # Automatically mount a ServiceAccount's API credentials
   automount: true
-  # Annotations to add to the service account
   annotations: {}
-  # The name of the service account to use. If not set and create is true, a name is generated using the fullname template
   name: ""
 
-# Additional annotations to add to the pods
 podAnnotations: {}
-# Additional labels to add to the pods
 podLabels: {}
+podSecurityContext: {}
+securityContext: {}
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
 
-# Define security context for the pod
-podSecurityContext:
-  {}
-  # fsGroup: 2000
-
-# Define security context for the container
-securityContext:
-  {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
-
-# -- Environment variables for the nats-iam-broker container
-envFrom:
-  []
+# For injecting secrets as env vars (e.g., from K8s Secrets)
+envFrom: []
   # - secretRef:
   #     name: nats-secrets
-  # - configMapRef:
-  #     name: nats-iam-broker-config
+env: []
 
-env:
-  # -- Account name for the IAM service (required)
-  - name: IAM_ACCOUNT_NAME
-    value: "MINT"
-
-  # -- Service name
-  # defaults to <IAM_ACCOUNT_NAME>-iam-broker-svc
-  - name: IAM_NAME
-    value: ""  
-    
-  # -- Service description
-  # defaults to <IAM_ACCOUNT_NAME> IAM Broker
-  - name: IAM_DESCRIPTION
-    value: ""
-
-  # -- Internal version of this IAM nats-microservice (required)  
-  # 
-  # This can be used, for example, to version deployments of rbac configs
-  # independently of the helm chart version.
-  - name: IAM_VERSION
-    value: "0.1.0"
-
-  # -- Primary Idp Issuer URL (required)
-  - name: IDP_ISSUER_URL 
-    value: "https://sso.ebotmore.com"
-    
-  # -- Primary Idp ClientIds (required)
-  - name: IDP_CLIENT_ID
-    value: "310313383524106453"
-    
-  # -- NATS server URL
-  - name: NATS_URL
-    value: "nats://nats-sand.ebotmore.com:4222"
-    
-  # -- Primary Idp Description
-  - name: IDP_DESCRIPTION
-    value: "Zitadel Identity Provider"
-    
-  # -- Delay before starting service
-  - name: IAM_STARTUP_DELAY
-    value: "10s"
-    
-  # -- CSVs of port-forwards; item format: <ext_host>:<ext_port>:<container_port>
-  - name: IAM_PORT_FORWARDS
-    value: ""
-    
-  # -- Glob for config files
-  - name: IAM_CONFIGS
-    value: "/config/*.yaml"
-    
-  # -- Path to encryption key
-  # defaults to /secrets/<iam_account_name>-enc.xk
-  - name: IAM_SERVICE_XK
-    value: ""
-    
-  # -- Expiration time of minted NATS JWT
-  - name: IAM_JWT_EXP
-    value: "1h15m"
-    
-  # -- Path to signing key
-  - name: IAM_ACCOUNT_SIGNK
-    value: ""  # defaults to /secrets/<iam_account_name>-sk-1.nk
-    
-  # -- Path to user credentials
-  # defaults to /secrets/<iam_account_name>-ac-user.creds
-  - name: IAM_USER_CREDS
-    value: ""
-    
-  # -- CSVs of accounts the IAM service can mint users for
-  - name: APP_AUTO_ACCOUNTS
-    value: ""
-
-# Resource requests and limits for the container
-resources:
-  {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
-
-# Additional volumes on the output Deployment definition.
-volumes:
-  []
+# For mounting secret files
+volumes: []
   # - name: nats-secrets
   #   secret:
   #     secretName: nats-secrets
-
-# Additional volumeMounts on the output Deployment definition.
-volumeMounts:
-  []
+volumeMounts: []
   # - name: nats-secrets
-  #   mountPath: /etc/nats/secrets
+  #   mountPath: /secrets
   #   readOnly: true
-
-# Node selector for pod scheduling
-nodeSelector: {}
-
-# Tolerations for pod scheduling
-tolerations: []
-
-# Affinity rules for pod scheduling
-affinity: {}

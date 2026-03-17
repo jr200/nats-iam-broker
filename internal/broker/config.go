@@ -282,6 +282,26 @@ func (cm *ConfigManager) GetConfig(mappings map[string]interface{}) (*Config, er
 		return nil, err
 	}
 
+	// Discover and merge auto-accounts if auto_accounts_dir is set
+	if cfg.Rbac.AutoAccountsDir != "" {
+		discovered, err := cfg.Rbac.discoverAccounts()
+		if err != nil {
+			return nil, fmt.Errorf("auto-account discovery failed: %w", err)
+		}
+		// Merge discovered accounts, skipping any that already exist by name
+		existing := make(map[string]bool, len(cfg.Rbac.Accounts))
+		for _, acct := range cfg.Rbac.Accounts {
+			existing[acct.Name] = true
+		}
+		for _, acct := range discovered {
+			if existing[acct.Name] {
+				zap.L().Debug("auto_accounts_dir: skipping already-defined account", zap.String("account", acct.Name))
+				continue
+			}
+			cfg.Rbac.Accounts = append(cfg.Rbac.Accounts, acct)
+		}
+	}
+
 	// Warn about role bindings with missing account or roles
 	for i, rb := range cfg.Rbac.RoleBinding {
 		if rb.Account == "" {

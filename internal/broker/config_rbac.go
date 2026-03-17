@@ -3,6 +3,8 @@ package broker
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -56,6 +58,67 @@ type Rbac struct {
 	Roles                       []Role              `yaml:"roles"`
 	TokenMaxExpiry              Duration            `yaml:"token_max_expiration"`
 	RoleBindingMatchingStrategy RoleBindingStrategy `yaml:"role_binding_matching_strategy"`
+	AutoAccountsDir             string              `yaml:"auto_accounts_dir"`
+}
+
+// discoverAccounts scans AutoAccountsDir for files matching *-id-1.pub and *-sk-1.nk pairs,
+// extracts account names from the filename prefix, and returns UserAccountInfo entries.
+// The public key is read from <name>-id-1.pub and the signing nkey from <name>-sk-1.nk.
+func (r *Rbac) discoverAccounts() ([]UserAccountInfo, error) {
+	if r.AutoAccountsDir == "" {
+		return nil, nil
+	}
+
+	pubFiles, err := filepath.Glob(filepath.Join(r.AutoAccountsDir, "*-id-1.pub"))
+	if err != nil {
+		return nil, fmt.Errorf("error scanning auto_accounts_dir %q: %w", r.AutoAccountsDir, err)
+	}
+
+	var discovered []UserAccountInfo
+	for _, pubFile := range pubFiles {
+		base := filepath.Base(pubFile)
+		// Extract account name: everything before "-id-1.pub"
+		name := strings.TrimSuffix(base, "-id-1.pub")
+		if name == base {
+			continue // didn't match the suffix pattern
+		}
+
+		skFile := filepath.Join(r.AutoAccountsDir, name+"-sk-1.nk")
+		if _, err := os.Stat(skFile); os.IsNotExist(err) {
+			zap.L().Warn("auto_accounts_dir: found public key but no signing key, skipping",
+				zap.String("account", name),
+				zap.String("pub_file", pubFile),
+				zap.String("expected_sk", skFile))
+			continue
+		}
+
+		pubKeyBytes, err := os.ReadFile(pubFile)
+		if err != nil {
+			return nil, fmt.Errorf("error reading public key for account %q: %w", name, err)
+		}
+
+		skBytes, err := os.ReadFile(skFile)
+		if err != nil {
+			return nil, fmt.Errorf("error reading signing key for account %q: %w", name, err)
+		}
+
+		var signingNKey NKey
+		if err := signingNKey.UnmarshalText(skBytes); err != nil {
+			return nil, fmt.Errorf("error parsing signing key for account %q: %w", name, err)
+		}
+
+		discovered = append(discovered, UserAccountInfo{
+			Name:        name,
+			PublicKey:   strings.TrimSpace(string(pubKeyBytes)),
+			SigningNKey: signingNKey,
+		})
+
+		zap.L().Info("auto_accounts_dir: discovered account",
+			zap.String("account", name),
+			zap.String("dir", r.AutoAccountsDir))
+	}
+
+	return discovered, nil
 }
 
 type UserAccountInfo struct {

@@ -1,11 +1,11 @@
-{{- if and .Values.metrics.enabled .Values.metrics.serviceMonitor.enabled }}
+{{- if and .Values.server.metrics .Values.server.serviceMonitor.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: {{ include "nats-iam-broker.fullname" . }}
   labels:
     {{- include "nats-iam-broker.labels" . | nindent 4 }}
-    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- with .Values.server.serviceMonitor.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
@@ -14,6 +14,6 @@ spec:
       {{- include "nats-iam-broker.selectorLabels" . | nindent 6 }}
   endpoints:
     - port: metrics
-      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      interval: {{ .Values.server.serviceMonitor.interval }}
       path: /metrics
 {{- end }}

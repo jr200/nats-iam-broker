@@ -1,13 +1,10 @@
 rbac:
   token_max_expiration: 24h
 
-  # accounts specified in APP_AUTO_ACCOUNTS will be auto-generated and loaded on startup
-  #  e.g., if APP_AUTO_ACCOUNTS=XX,YY
-  #  the following user_accounts will be generated:
-  #  - name: XX
-  #    public_key: '{{ readFile "/secrets/XX-id-1.pub" | trim }}'
-  #    signing_nkey: '{{ readFile "/secrets/XX-sk-1.pub" | trim }}'
-  #  ...etc...
+  # Automatically discover user accounts from secret files in the secrets directory.
+  # Scans for matching pairs: <name>-id-1.pub and <name>-sk-1.nk
+  auto_accounts_dir: '{{ env "IAM_SECRETS_DIR" }}'
+
   user_accounts: []
 
   role_binding_matching_strategy: best_match
@@ -15,11 +12,9 @@ rbac:
     # - match: { claim: preferred_username, value: 'admin' }
     #   user_account: XX
     #   token_max_expiration: 1h
-    #   roles: []
+    #   roles:
     #     - can-api
     #     - streaming
-    #     - kv
-    #     - object-store
 
   roles: []
     # - name: can-api
@@ -40,24 +35,8 @@ rbac:
     #     pub:
     #       allow:
     #         - "$JS.API.STREAM.CREATE.basic_test_stream"
-    #         - "$JS.API.STREAM.UPDATE.basic_test_stream"
-    #         - "$JS.API.CONSUMER.CREATE.basic_test_stream.basic_test_stream"
-    #         - "$JS.API.CONSUMER.MSG.NEXT.basic_test_stream.basic_test_stream"
     #     resp:
     #       max_msgs: 1
     #       exp: 1h
-
     #   limits:
     #     data: 65536
-
-    # - name: kv
-    #   permissions:
-    #     sub:
-    #       allow:
-    #         - "$KV.>"
-
-    # - name: object-store
-    #   permissions:
-    #     sub:
-    #       allow:
-    #         - "$OBJ.>"

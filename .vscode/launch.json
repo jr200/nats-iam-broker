@@ -30,13 +30,13 @@
             "env": {
                 "NATS_URL": "nats://localhost:4222",
                 "SECRET_STORE": "/Users/user/code/nats-iam-broker/assets/pki",
-                "SERVICE_NAME": "nats-iam-broker",
-                "SERVICE_VERSION": "0.0.11",
-                "SERVICE_DESC": "nats-iam-broker Jwt Minting Service",
-                "NATS_ACCOUNT": "MINTER",
-                "SERVICE_USER_CREDS": "$SECRET_STORE/nats/nsc/keys/creds/OP_DEV/MINTER/auth.creds",
-                "SERVICE_ACCT_SIGNK": "$SECRET_STORE/Accounts/MINTER/acct-signing-key.nk",
-                "SERVICE_ACCT_XK": "$SECRET_STORE/Accounts/MINTER/acct-encryption-key.xk"
+                "IAM_NAME": "nats-iam-broker",
+                "IAM_VERSION": "0.0.11",
+                "IAM_DESCRIPTION": "nats-iam-broker Jwt Minting Service",
+                "IAM_ACCOUNT_NAME": "MINTER",
+                "IAM_USER_CREDS": "$SECRET_STORE/nats/nsc/keys/creds/OP_DEV/MINTER/auth.creds",
+                "IAM_ACCOUNT_SIGNK": "$SECRET_STORE/Accounts/MINTER/acct-signing-key.nk",
+                "IAM_SERVICE_XK": "$SECRET_STORE/Accounts/MINTER/acct-encryption-key.xk"
             }
         },
         {
