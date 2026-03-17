@@ -13,14 +13,21 @@ import (
 	"github.com/nats-io/jwt/v2"
 )
 
+// jwePartCount is the number of dot-separated segments in a compact JWE token.
+const jwePartCount = 5
+
+// natsJWTPartCount is the number of dot-separated segments in a NATS JWT token.
+const natsJWTPartCount = 3
+
 func runDecrypt(args []string) int {
 	fs := flag.NewFlagSet("decrypt", flag.ExitOnError)
-	keyStr := fs.String("key", "", "symmetric key in base64url encoding (64 bytes for A256CBC-HS512)")
+	keyStr := fs.String("key", "", "symmetric key in base64url encoding (for JWE decryption)")
 
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "Usage: %s decrypt [--key <base64url-key>] <jwe-token>\n\n", os.Args[0])
-		fmt.Fprintf(fs.Output(), "Decrypt a JWE-encrypted NATS JWT token.\n\n")
-		fmt.Fprintf(fs.Output(), "If --key is not provided, only the JWE header is displayed.\n\n")
+		fmt.Fprintf(fs.Output(), "Usage: %s decrypt [--key <base64url-key>] <token>\n\n", os.Args[0])
+		fmt.Fprintf(fs.Output(), "Decode a NATS JWT or decrypt a JWE-encrypted token.\n\n")
+		fmt.Fprintf(fs.Output(), "  NATS JWT (3 parts): decoded directly, no key needed\n")
+		fmt.Fprintf(fs.Output(), "  JWE token (5 parts): requires --key for decryption\n\n")
 		fs.PrintDefaults()
 	}
 
@@ -34,6 +41,30 @@ func runDecrypt(args []string) int {
 		return 1
 	}
 
+	parts := strings.Split(token, ".")
+	switch len(parts) {
+	case natsJWTPartCount:
+		return decodeNATSJWT(token)
+	case jwePartCount:
+		return decodeJWEToken(token, *keyStr)
+	default:
+		fmt.Fprintf(os.Stderr, "unrecognised token format: expected %d parts (NATS JWT) or %d parts (JWE), got %d\n",
+			natsJWTPartCount, jwePartCount, len(parts))
+		return 1
+	}
+}
+
+func decodeNATSJWT(token string) int {
+	decoded, err := tryDecodeNATSJWT(token)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error decoding NATS JWT: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(os.Stdout, "=== NATS JWT ===\n%s\n", decoded)
+	return 0
+}
+
+func decodeJWEToken(token, keyStr string) int {
 	// Always display the JWE header
 	header, err := decodeJWEHeader(token)
 	if err != nil {
@@ -48,12 +79,12 @@ func runDecrypt(args []string) int {
 	}
 	fmt.Fprintf(os.Stdout, "=== JWE Header ===\n%s\n", headerJSON)
 
-	if *keyStr == "" {
+	if keyStr == "" {
 		fmt.Fprintf(os.Stdout, "\nNo --key provided; only header shown. Provide --key to decrypt payload.\n")
 		return 0
 	}
 
-	key, err := base64.RawURLEncoding.DecodeString(*keyStr)
+	key, err := base64.RawURLEncoding.DecodeString(keyStr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error decoding key: %v\n", err)
 		return 1
@@ -88,7 +119,6 @@ func runDecrypt(args []string) int {
 }
 
 func decodeJWEHeader(token string) (map[string]interface{}, error) {
-	// Split to extract just the first segment (header)
 	idx := strings.IndexByte(token, '.')
 	if idx < 0 {
 		return nil, fmt.Errorf("invalid JWE token format")
