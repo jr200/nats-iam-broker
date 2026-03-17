@@ -7,7 +7,7 @@ rbac:
   role_binding:
     - user_account: APP30
       match:
-        - { claim: aud, value: public }
+        - { claim: aud, value: mockclientid }
       roles:
         - can-pubsub
 

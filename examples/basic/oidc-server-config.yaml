@@ -1,0 +1,25 @@
+---
+client_id: mockclientid
+client_secret: mockclientsecret
+issuer_base_url: http://127.0.0.1:5550
+supported_scopes:
+  - openid
+  - profile
+  - email
+
+# User queue: dequeued in filename order per client_credentials grant.
+# Order must match test execution in basic_simulate_login.sh:
+#   01-dwho.yaml   -> test 1 (pubsub)
+#   02-rtyler.yaml -> test 2 (pubsub)
+#   fallback       -> test 3 (jetstream, reuses JWT_DWHO from test 1)
+mock_user_folder: /usr/src/app/examples/basic/oidc-users
+
+# Fallback user after queue is exhausted
+mock_user:
+  sub: dwho
+  id_token_claims: {}
+  access_token_claims:
+    scope: "openid profile email"
+  userinfo_claims:
+    sub: dwho
+    email: dwho@example.com

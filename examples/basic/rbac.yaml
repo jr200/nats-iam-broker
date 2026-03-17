@@ -40,7 +40,7 @@ rbac:
 
     - user_account: APP1
       match:
-        - { claim: aud, value: public }
+        - { claim: aud, value: mockclientid }
       roles:
         - can-pubsub
         - streaming
@@ -73,7 +73,7 @@ rbac:
 
     - user_account: APP1
       match:
-        - { claim: aud, value: public }
+        - { claim: aud, value: mockclientid }
         - { claim: sub, value: "dwho" }
       token_max_expiration: 1h
       roles:
@@ -83,7 +83,7 @@ rbac:
 
     - user_account: APP1
       match:
-        - { claim: aud, value: public }
+        - { claim: aud, value: mockclientid }
         - { claim: sub, value: "rtyler" }
       token_max_expiration: 10s
       roles:

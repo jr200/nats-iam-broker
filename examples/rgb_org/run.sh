@@ -4,6 +4,10 @@ SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}"/../../scripts/nats-toolkit.sh
 
+# start oidc server
+echo starting OIDC-SERVER
+oidc-server start -c /usr/src/app/examples/rgb_org/oidc-server-config.yaml -p 5550 &
+
 # bootstrap a new NATS server
 NATS_PORT=${NATS_PORT:-4222}
 create_new_nats_config "nats://localhost:${NATS_PORT}" rgb_org

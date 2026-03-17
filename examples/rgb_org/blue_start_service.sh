@@ -15,4 +15,4 @@ export IAM_USER_CREDS="${SECRET_STORE}/MINT_11/user-minter.creds"
 export IAM_ACCOUNT_SIGNK="${SECRET_STORE}/MINT_11/acct-signing-key.nk"
 export IAM_SERVICE_XK="${SECRET_STORE}/MINT_11/acct-encryption-key.xk"
 
-nats-iam-broker serve "${@}" ${CONFIG_DIR}/*.yaml "${SCRIPT_DIR}"/blue_rbac.yaml &
+nats-iam-broker serve "${@}" ${CONFIG_DIR}/env_minter.yaml ${CONFIG_DIR}/idp_mock.yaml "${SCRIPT_DIR}"/blue_rbac.yaml &

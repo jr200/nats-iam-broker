@@ -21,7 +21,7 @@ rbac:
 
     - user_account: APP3
       match:
-        - { claim: aud, value: public }
+        - { claim: aud, value: mockclientid }
       roles:
         - can-pubsub
 

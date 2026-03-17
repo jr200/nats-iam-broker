@@ -1,0 +1,26 @@
+---
+client_id: mockclientid
+client_secret: mockclientsecret
+issuer_base_url: http://127.0.0.1:5550
+supported_scopes:
+  - openid
+  - profile
+  - email
+
+# User queue: dequeued in filename order per client_credentials grant.
+# Order must match test execution across simulate_login.sh scripts:
+#   01-dwho.yaml      -> red test 1
+#   02-rtyler.yaml    -> green test 1
+#   03-rtyler-2.yaml  -> green test 2
+#   fallback          -> blue test 1
+mock_user_folder: /usr/src/app/examples/rgb_org/oidc-users
+
+# Fallback user after queue is exhausted
+mock_user:
+  sub: msmith
+  id_token_claims: {}
+  access_token_claims:
+    scope: "openid profile email"
+  userinfo_claims:
+    sub: msmith
+    email: msmith@example.com
