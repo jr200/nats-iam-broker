@@ -16,15 +16,6 @@ else
 endif
 export GOARCH ?= $(TARGET_ARCH_LOCAL)
 
-# get docker tag
-ifeq ($(GOARCH),amd64)
-	LATEST_TAG?=latest
-	OIDC_SERVER_ARCH?=''
-else
-	LATEST_TAG?=latest-$(GOARCH)
-	OIDC_SERVER_ARCH?='-arm64'
-endif
-
 # get target os
 LOCAL_OS := $(shell uname -s)
 ifeq ($(LOCAL_OS),Linux)
@@ -78,6 +69,19 @@ test:
 	go test -timeout=10m ./...
 
 ################################################################################
+# Target: test-integration                                                     #
+################################################################################
+.PHONY: test-integration
+test-integration:
+	go test -tags=integration -timeout=5m -count=1 ./tests/integration/...
+
+################################################################################
+# Target: test-all                                                             #
+################################################################################
+.PHONY: test-all
+test-all: test test-integration
+
+################################################################################
 # Target: test-race                                                            #
 ################################################################################
 .PHONY: test-race
@@ -117,10 +121,6 @@ build:
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) \
 	go build -o build/nats-iam-broker-$(GOOS)-$(GOARCH) -ldflags '-extldflags "-static"' \
 	./cmd/nats-iam-broker/
-
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) \
-	go build -o build/test-client-$(GOOS)-$(GOARCH) -ldflags '-extldflags "-static"' \
-	./cmd/test-client/
 
 ################################################################################
 # Target: clean                                                                #
@@ -169,20 +169,6 @@ docker-offical-build:
 		.
 
 ################################################################################
-# Target: docker-example-build                                                 #
-################################################################################
-.PHONY: docker-example-build
-docker-example-build:
-	echo GOARCH=$(GOARCH)
-	docker build \
-		-f docker/Dockerfile.example \
-		--build-arg BUILD_OS=linux \
-		--build-arg BUILD_ARCH=$(GOARCH) \
-		--build-arg OIDC_SERVER_ARCH=$(OIDC_SERVER_ARCH) \
-		-t ghcr.io/jr200/nats-iam-broker:debug \
-		.
-
-################################################################################
 # Target: helm chart dependencies
 ################################################################################
 .PHONY: chart-deps
@@ -220,36 +206,3 @@ chart-dry-run:
 		--debug \
 		charts/nats-iam-broker
 
-################################################################################
-# Target: example-shell                                                        #
-################################################################################
-.PHONY: example-shell
-example-shell: docker-example-build
-	docker run --rm -it --entrypoint bash ghcr.io/jr200/nats-iam-broker:debug
-
-################################################################################
-# Target: example-mock                                                        #
-################################################################################
-.PHONY: example-mock
-example-mock: docker-example-build
-	docker run --network=host --rm \
-		-e NATS_PORT=14222 -e NATS_HTTP_PORT=18222 -e NATS_WS_PORT=18080 \
-		--entrypoint examples/mock/run.sh ghcr.io/jr200/nats-iam-broker:debug --log-format=human --log-level=info
-
-################################################################################
-# Target: example-basic                                                        #
-################################################################################
-.PHONY: example-basic
-example-basic: docker-example-build
-	docker run --network=host --rm \
-		-e NATS_PORT=14222 -e NATS_HTTP_PORT=18222 -e NATS_WS_PORT=18080 \
-		--entrypoint examples/basic/run.sh ghcr.io/jr200/nats-iam-broker:debug --log-format=human --log-level=info
-
-################################################################################
-# Target: example-rgb_org                                                      #
-################################################################################
-.PHONY: example-rgb_org
-example-rgb_org: docker-example-build
-	docker run --network=host --rm \
-		-e NATS_PORT=14222 -e NATS_HTTP_PORT=18222 -e NATS_WS_PORT=18080 \
-		--entrypoint examples/rgb_org/run.sh ghcr.io/jr200/nats-iam-broker:debug --log-format=human --log-level=info

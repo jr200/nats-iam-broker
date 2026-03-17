@@ -16,4 +16,3 @@ docker/Dockerfile*
 docs/
 private/
 service/service
-test-client/test-client

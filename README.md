@@ -17,11 +17,11 @@ A configurable NATS auth callout micro-service that exchanges Identity Provider 
 ## Quick Start
 
 ```bash
-# Run with a config file
-nats-iam-broker config.yaml
+# Run with config files
+nats-iam-broker serve env.yaml idp.yaml rbac.yaml
 
 # With hot-reload and metrics
-nats-iam-broker --watch -metrics config.yaml
+nats-iam-broker serve --watch --metrics env.yaml idp.yaml rbac.yaml
 ```
 
 ## Documentation

@@ -29,4 +29,4 @@ where:
 
 ## Quick Start
 
-Head to the [Getting Started](getting-started.qmd) guide or explore the [Examples](examples.qmd) to see the broker in action.
+Head to the [Getting Started](getting-started.qmd) guide or read [How It Works](examples.qmd) for a walkthrough of the auth callout flow.

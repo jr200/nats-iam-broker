@@ -1,24 +1,10 @@
 ---
-title: "Examples"
+title: "How It Works"
 ---
 
-The mock OIDC/OAuth2 service <https://oidctest.wsweet.org/> is used to obtain an authenticated JWT `id_token`.
+This section walks through the auth callout flow using a realistic multi-tenant scenario.
 
-The example scripts in the `scripts/` and `examples/` folders demonstrate how to configure, deploy and test this micro-service. These are structured as:
-
-- `scripts`
-  - `*-toolkit.sh`, helper bash functions.
-  - `/templates/*`, templates to use with vault/openbao and [vault-plugin-secret-nats](https://github.com/edgefarm/vault-plugin-secrets-nats).
-- `examples`
-  - `/<example_name>`
-    - `/<name>_initial_setup.sh`, one-time script to setup decentralised accounts and users
-    - `/<name>_start_service.sh`, configures and starts the auth callout micro-service
-    - `/<name>_simulate_login.sh`, contacts IdP, authenticates, and uses the obtained token to establish a client connection with NATS
-    - `/run.sh`, run all steps in the example
-
-Assuming docker is installed, the examples can be run using: `make example-<example_name>`.
-
-## Example 1: RGB.org {#sec-rgb-org}
+## Scenario: RGB.org {#sec-rgb-org}
 
 The `RGB.org` organisation has three departments that share a single NATS deployment. A department consists of several teams, with each team developing a set of applications.
 
@@ -68,11 +54,58 @@ Bob is a member of `App Team 3`, and wishes to use their in-house app `demo-app`
 
 [^3]: this uses the `XKey` field. It is optional but recommended.
 
-## Example 2: Basic
+## Minimal Configuration
 
-This example demonstates a simpler setup consisting of:
+A simpler setup consisting of one auth callout account (`MINT`) and one application account (`APP1`):
 
-- one auth callout microservice `MINT`, with standard users `minter` and `nobody`
-- one application account `APP1`
+```yaml
+# env.yaml
+nats:
+  url: "nats://localhost:4222"
+  jwt_expiry_bounds:
+    min: 1m
+    max: 1h
+service:
+  name: "my-iam-broker"
+  description: "IAM Broker"
+  version: "0.1.0"
+  creds_file: "/secrets/user.creds"
+  account:
+    name: "MINT"
+    signing_nkey: "<MINT_SIGNING_NKEY>"
+    xkey_seed: "<XKEY_SEED>"
 
-As in the previous example, authorised NATS users are created and signed on-the-fly, following successful validation of the IdP token.
+# idp.yaml
+idp:
+  - description: "My IDP"
+    issuer_url: "https://idp.example.com"
+    client_id: "my-client-id"
+
+# rbac.yaml
+rbac:
+  user_accounts:
+    - name: APP1
+      public_key: "<APP1_PUBLIC_KEY>"
+      signing_nkey: "<APP1_SIGNING_NKEY>"
+
+  role_binding:
+    - user_account: APP1
+      match:
+        - { claim: aud, value: "my-client-id" }
+      roles:
+        - default-access
+
+  roles:
+    - name: default-access
+      permissions:
+        pub:
+          allow: ["app.>"]
+        sub:
+          allow: ["app.>"]
+```
+
+```bash
+nats-iam-broker serve env.yaml idp.yaml rbac.yaml
+```
+
+For full configuration details, see the [Configuration Reference](configuration.qmd).

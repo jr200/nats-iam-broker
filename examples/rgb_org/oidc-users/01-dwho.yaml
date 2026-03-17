@@ -1,7 +1,0 @@
-sub: dwho
-id_token_claims: {}
-access_token_claims:
-  scope: "openid profile email"
-userinfo_claims:
-  sub: dwho
-  email: dwho@example.com

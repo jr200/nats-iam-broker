@@ -21,7 +21,8 @@ Please be respectful and constructive in all interactions. We are committed to p
 3. **Add or update tests** for any new or changed functionality.
 4. **Run the test suite** to make sure everything passes:
    ```bash
-   go test ./...
+   make test          # unit tests
+   make test-integration  # integration tests (embedded NATS + mock OIDC)
    ```
 5. **Open a Pull Request** against `main` with a clear description of your changes.
 
@@ -35,11 +36,14 @@ cd nats-iam-broker
 # Install dependencies
 go mod download
 
-# Run tests
-go test ./...
+# Run unit tests
+make test
+
+# Run integration tests
+make test-integration
 
 # Build
-go build ./...
+make build
 ```
 
 ### Pull Request Guidelines

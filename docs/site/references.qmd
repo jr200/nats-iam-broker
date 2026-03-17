@@ -6,4 +6,3 @@ title: "References"
 2. [Synadia Decentralised Auth Callout (YouTube)](https://www.youtube.com/watch?v=5pQVjN0ym5w)
 3. [NATS by Example: Decentralized Auth Callout](https://natsbyexample.com/examples/auth/callout-decentralized/cli)
 4. [Rethinking Connectivity 19: Auth Callout](https://github.com/synadia-io/rethink_connectivity/tree/main/19-auth-callout)
-5. [Mock OIDC Service (LemonLDAP)](https://lemonldap-ng.org/documentation/latest/testopenidconnect.html)

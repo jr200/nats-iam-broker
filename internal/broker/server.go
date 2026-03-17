@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -13,7 +14,21 @@ import (
 	"go.uber.org/zap"
 )
 
+// Start runs the broker, blocking until an OS interrupt signal is received.
 func Start(configFiles []string, cliOpts *Options, cliFlags map[string]bool) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		internal.WaitForInterrupt()
+		cancel()
+	}()
+
+	return StartWithContext(ctx, configFiles, cliOpts, cliFlags)
+}
+
+// StartWithContext runs the broker, blocking until the given context is cancelled.
+func StartWithContext(ctx context.Context, configFiles []string, cliOpts *Options, cliFlags map[string]bool) error {
 	configManager, err := NewConfigManager(configFiles)
 	if err != nil {
 		return fmt.Errorf("failed to initialize config manager: %v", err)
@@ -25,7 +40,7 @@ func Start(configFiles []string, cliOpts *Options, cliFlags map[string]bool) err
 	// Configure logging from merged options (YAML + CLI overrides)
 	logging.Setup(serverOpts.LogLevel, serverOpts.LogFormat == "human")
 
-	ctx := NewServerContext(serverOpts)
+	srvCtx := NewServerContext(serverOpts)
 
 	config, err := configManager.GetConfig(make(map[string]interface{}))
 	if err != nil {
@@ -110,7 +125,7 @@ func Start(configFiles []string, cliOpts *Options, cliFlags map[string]bool) err
 		health.SetNATSConn(nc)
 	}
 
-	idpVerifiers, err := NewIdpVerifiers(ctx, config)
+	idpVerifiers, err := NewIdpVerifiers(srvCtx, config)
 	if err != nil {
 		return err
 	}
@@ -130,7 +145,7 @@ func Start(configFiles []string, cliOpts *Options, cliFlags map[string]bool) err
 		idpVerifiers:  idpVerifiers,
 		auditSubject:  auditEventSubject,
 	}
-	watcher := NewConfigWatcher(ctx, configFiles, initial)
+	watcher := NewConfigWatcher(srvCtx, configFiles, initial)
 
 	if serverOpts.WatchConfig {
 		if err := watcher.Start(); err != nil {
@@ -140,8 +155,8 @@ func Start(configFiles []string, cliOpts *Options, cliFlags map[string]bool) err
 		}
 	}
 
-	authCallback := newAuthCallbackWithWatcher(ctx, m, nc, watcher)
-	auth := NewAuthService(ctx, config.Service.Account.SigningNKey.KeyPair, config.serviceEncryptionXkey(), authCallback, m)
+	authCallback := newAuthCallbackWithWatcher(srvCtx, m, nc, watcher)
+	auth := NewAuthService(srvCtx, config.Service.Account.SigningNKey.KeyPair, config.serviceEncryptionXkey(), authCallback, m)
 
 	zap.L().Info("starting service", zap.String("version", config.Service.Version))
 
@@ -164,8 +179,8 @@ func Start(configFiles []string, cliOpts *Options, cliFlags map[string]bool) err
 
 	zap.L().Info("listening for auth requests", zap.String("subject", "$SYS.REQ.USER.AUTH"), zap.String("addr", nc.ConnectedAddr()))
 
-	// Block and wait for interrupt signal
-	internal.WaitForInterrupt()
+	// Block until context is cancelled
+	<-ctx.Done()
 
 	zap.L().Info("exiting")
 	return nil

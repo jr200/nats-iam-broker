@@ -16,7 +16,7 @@ website:
       - href: getting-started.qmd
         text: Getting Started
       - href: examples.qmd
-        text: Examples
+        text: How It Works
       - text: Configuration
         menu:
           - href: configuration.qmd
@@ -41,7 +41,8 @@ website:
       contents:
         - index.qmd
         - getting-started.qmd
-        - examples.qmd
+        - text: "How It Works"
+          href: examples.qmd
         - section: "Configuration"
           contents:
             - configuration.qmd
