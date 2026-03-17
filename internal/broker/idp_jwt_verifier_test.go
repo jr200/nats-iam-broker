@@ -299,9 +299,7 @@ func TestNewIdpVerifiers(t *testing.T) {
 				Idp: tc.idpConfigs,
 				// Add other minimal required config fields if necessary
 				Service: Service{
-					Account: ServiceAccount{
-						Encryption: Encryption{Enabled: false},
-					},
+					Account: ServiceAccount{},
 				},
 				NATS: NATS{
 					TokenExpiryBounds: DurationBounds{Max: Duration{Duration: time.Hour}},

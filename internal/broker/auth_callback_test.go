@@ -47,7 +47,7 @@ func newTestFixture(t *testing.T) *testFixture {
 	configYAML := fmt.Sprintf(`
 nats:
   url: "nats://localhost:4222"
-  token_bounds:
+  jwt_expiry_bounds:
     min: 1m
     max: 1h
 service:
@@ -58,8 +58,6 @@ service:
   account:
     name: "test"
     signing_nkey: "SUAGJBPRRXFQL2DXLG4CXW5D6XTLJ4DDMMKHNCIAPNK2Y4IZFHTJM6HN"
-    encryption:
-      enabled: true
 idp:
   - description: "Test IDP"
     issuer_url: "https://test.idp"
@@ -217,7 +215,7 @@ func TestBuildUserClaims_EndToEnd(t *testing.T) {
 		longExpiryCfg := fmt.Sprintf(`
 nats:
   url: "nats://localhost:4222"
-  token_bounds:
+  jwt_expiry_bounds:
     min: 1m
     max: 4h
 service:
@@ -228,8 +226,6 @@ service:
   account:
     name: "test"
     signing_nkey: "SUAGJBPRRXFQL2DXLG4CXW5D6XTLJ4DDMMKHNCIAPNK2Y4IZFHTJM6HN"
-    encryption:
-      enabled: true
 idp:
   - description: "Test IDP"
     issuer_url: "https://test.idp"

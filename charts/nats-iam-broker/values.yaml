@@ -41,7 +41,7 @@ server:
 config:
   nats:
     url: "nats://nats:4222"
-    token_bounds:
+    jwt_expiry_bounds:
       min: 1m
       max: 24h
 
@@ -55,10 +55,8 @@ config:
       # Use Go template expressions for secrets read at runtime:
       #   signing_nkey: '{{ readFile "/secrets/signing.nk" }}'
       signing_nkey: ""
-      encryption:
-        enabled: true
-        # xkey_secret: '{{ readNthLine 1 "/secrets/enc.xk" }}'
-        xkey_secret: ""
+      # xkey_seed: '{{ readNthLine 1 "/secrets/enc.xk" }}'
+      xkey_seed: ""
 
   idp: []
   #  - description: "My Identity Provider"

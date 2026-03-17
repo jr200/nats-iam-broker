@@ -1,13 +1,118 @@
 package broker
 
 import (
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 
 	"github.com/nats-io/jwt/v2"
+	"github.com/nats-io/nkeys"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestDiscoverAccounts(t *testing.T) {
+	// Helper to create a valid account keypair and write its files
+	writeAccountFiles := func(t *testing.T, dir, name string) string {
+		t.Helper()
+		kp, err := nkeys.CreateAccount()
+		require.NoError(t, err)
+		pub, err := kp.PublicKey()
+		require.NoError(t, err)
+		sd, err := kp.Seed()
+		require.NoError(t, err)
+
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name+"-id-1.pub"), []byte(pub), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name+"-sk-1.nk"), sd, 0644))
+		return pub
+	}
+
+	t.Run("empty dir config returns nil", func(t *testing.T) {
+		r := &Rbac{AutoAccountsDir: ""}
+		accounts, err := r.discoverAccounts()
+		assert.NoError(t, err)
+		assert.Nil(t, accounts)
+	})
+
+	t.Run("no matching files returns empty", func(t *testing.T) {
+		dir := t.TempDir()
+		r := &Rbac{AutoAccountsDir: dir}
+		accounts, err := r.discoverAccounts()
+		assert.NoError(t, err)
+		assert.Empty(t, accounts)
+	})
+
+	t.Run("discovers single account", func(t *testing.T) {
+		dir := t.TempDir()
+		pub := writeAccountFiles(t, dir, "ACME")
+
+		r := &Rbac{AutoAccountsDir: dir}
+		accounts, err := r.discoverAccounts()
+		require.NoError(t, err)
+		require.Len(t, accounts, 1)
+		assert.Equal(t, "ACME", accounts[0].Name)
+		assert.Equal(t, pub, accounts[0].PublicKey)
+		assert.NotNil(t, accounts[0].SigningNKey.KeyPair)
+	})
+
+	t.Run("discovers multiple accounts", func(t *testing.T) {
+		dir := t.TempDir()
+		writeAccountFiles(t, dir, "ALPHA")
+		writeAccountFiles(t, dir, "BETA")
+
+		r := &Rbac{AutoAccountsDir: dir}
+		accounts, err := r.discoverAccounts()
+		require.NoError(t, err)
+		require.Len(t, accounts, 2)
+
+		names := []string{accounts[0].Name, accounts[1].Name}
+		assert.Contains(t, names, "ALPHA")
+		assert.Contains(t, names, "BETA")
+	})
+
+	t.Run("skips pub without matching sk", func(t *testing.T) {
+		dir := t.TempDir()
+		kp, err := nkeys.CreateAccount()
+		require.NoError(t, err)
+		pub, _ := kp.PublicKey()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "ORPHAN-id-1.pub"), []byte(pub), 0644))
+
+		r := &Rbac{AutoAccountsDir: dir}
+		accounts, err := r.discoverAccounts()
+		assert.NoError(t, err)
+		assert.Empty(t, accounts)
+	})
+
+	t.Run("ignores unrelated files", func(t *testing.T) {
+		dir := t.TempDir()
+		writeAccountFiles(t, dir, "REAL")
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "readme.txt"), []byte("hello"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("x: y"), 0644))
+
+		r := &Rbac{AutoAccountsDir: dir}
+		accounts, err := r.discoverAccounts()
+		require.NoError(t, err)
+		require.Len(t, accounts, 1)
+		assert.Equal(t, "REAL", accounts[0].Name)
+	})
+
+	t.Run("invalid signing key produces nil KeyPair", func(t *testing.T) {
+		dir := t.TempDir()
+		kp, err := nkeys.CreateAccount()
+		require.NoError(t, err)
+		pub, _ := kp.PublicKey()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "BAD-id-1.pub"), []byte(pub), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "BAD-sk-1.nk"), []byte("not-a-valid-seed"), 0644))
+
+		r := &Rbac{AutoAccountsDir: dir}
+		accounts, err := r.discoverAccounts()
+		// NKey.UnmarshalText logs a warning but doesn't return an error
+		assert.NoError(t, err)
+		require.Len(t, accounts, 1)
+		assert.Nil(t, accounts[0].SigningNKey.KeyPair)
+	})
+}
 
 func TestLookupUserAccount_Strategies(t *testing.T) {
 	// Define some basic roles used in tests

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/goccy/go-yaml"
+	"github.com/nats-io/nkeys"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,8 +29,6 @@ service:
   account:
     name: "test"
     signing_nkey: "SUAGJBPRRXFQL2DXLG4CXW5D6XTLJ4DDMMKHNCIAPNK2Y4IZFHTJM6HN"
-    encryption:
-      enabled: true
 idp:
   - description: "Test IDP"
     issuer_url: "https://test.idp"
@@ -504,8 +503,6 @@ service:
   account:
     name: "test"
     signing_nkey: "SUAGJBPRRXFQL2DXLG4CXW5D6XTLJ4DDMMKHNCIAPNK2Y4IZFHTJM6HN"
-    encryption:
-      enabled: true
 idp:
   - description: "Test IDP"
     issuer_url: "https://test.idp"
@@ -555,4 +552,31 @@ rbac:
 	}
 
 	wg.Wait()
+}
+
+func TestServiceEncryptionXkey(t *testing.T) {
+	t.Run("returns nil when no xkey_seed configured", func(t *testing.T) {
+		cfg := &Config{
+			Service: Service{
+				Account: ServiceAccount{},
+			},
+		}
+		assert.Nil(t, cfg.serviceEncryptionXkey())
+	})
+
+	t.Run("returns keypair when xkey_seed configured", func(t *testing.T) {
+		kp, err := nkeys.CreateCurveKeys()
+		require.NoError(t, err)
+
+		cfg := &Config{
+			Service: Service{
+				Account: ServiceAccount{
+					XKeySeed: NKey{KeyPair: kp},
+				},
+			},
+		}
+		result := cfg.serviceEncryptionXkey()
+		assert.NotNil(t, result)
+		assert.Equal(t, kp, result)
+	})
 }

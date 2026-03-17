@@ -65,7 +65,7 @@ type ConfigParams struct {
 
 type NATS struct {
 	URL               string         `yaml:"url" validate:"required"`
-	TokenExpiryBounds DurationBounds `yaml:"token_bounds" validate:"required"`
+	TokenExpiryBounds DurationBounds `yaml:"jwt_expiry_bounds" validate:"required"`
 }
 
 type Service struct {
@@ -77,14 +77,9 @@ type Service struct {
 }
 
 type ServiceAccount struct {
-	Name        string     `yaml:"name"`
-	SigningNKey NKey       `yaml:"signing_nkey" validate:"required"`
-	Encryption  Encryption `yaml:"encryption" validate:"required"`
-}
-
-type Encryption struct {
-	Enabled bool `yaml:"enabled" validate:"required"`
-	Seed    NKey `yaml:"xkey_secret"`
+	Name        string `yaml:"name"`
+	SigningNKey NKey   `yaml:"signing_nkey" validate:"required"`
+	XKeySeed    NKey   `yaml:"xkey_seed"`
 }
 
 type Idp struct {
@@ -259,12 +254,11 @@ func (cm *ConfigManager) GetConfig(mappings map[string]interface{}) (*Config, er
 	if tempCfg.Service.Account.SigningNKey.KeyPair != nil {
 		cfg.Service.Account.SigningNKey = tempCfg.Service.Account.SigningNKey
 	}
-	if tempCfg.Service.Account.Encryption.Seed.KeyPair != nil {
-		cfg.Service.Account.Encryption.Seed = tempCfg.Service.Account.Encryption.Seed
+	if tempCfg.Service.Account.XKeySeed.KeyPair != nil {
+		cfg.Service.Account.XKeySeed = tempCfg.Service.Account.XKeySeed
 	}
 
 	cfg.Service.Account.Name = tempCfg.Service.Account.Name
-	cfg.Service.Account.Encryption.Enabled = tempCfg.Service.Account.Encryption.Enabled
 
 	// Update IDP list and RBAC
 	cfg.Idp = tempCfg.Idp
@@ -333,13 +327,10 @@ func (c *Config) natsOptions() []nats.Option {
 	return opts
 }
 
-// serviceEncryptionXkey returns the encryption key pair for the service account
+// serviceEncryptionXkey returns the encryption key pair for the service account.
+// Encryption is enabled when an xkey_seed is configured.
 func (c *Config) serviceEncryptionXkey() nkeys.KeyPair {
-	if c.Service.Account.Encryption.Enabled {
-		return c.Service.Account.Encryption.Seed.KeyPair
-	}
-
-	return nil
+	return c.Service.Account.XKeySeed.KeyPair
 }
 
 // UnmarshalText unmarshals a Duration from a string

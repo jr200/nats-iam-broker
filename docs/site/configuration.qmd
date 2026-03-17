@@ -57,8 +57,7 @@ Because arrays are concatenated, splitting array-typed fields (like `idp` or `rb
 | --- | ---- | ----------- |
 | `service.account.name` | `string` | (metadata) _human-readable reminder of account used to sign and encrypt communications with NATS server_ |
 | `service.account.signing_nkey` | `string` | key used to sign new user-jwt returned to NATS |
-| `service.account.encryption.enabled` | `bool` | toggle for communication-encryption with NATS server |
-| `service.account.encryption.xkey_secret` | `string` | trusted secret-key for encryption with NATS server |
+| `service.account.xkey_seed` | `string` | xkey seed for encrypted communication with NATS server (encryption is enabled when set) |
 
 ## IDP Configuration
 
@@ -89,7 +88,7 @@ The expiry of the issued NATS JWT is determined by the following rules, applied 
 2. **IDP validation bounds** (`idp.validation.exp.min` / `idp.validation.exp.max`) — if configured, the expiry is raised to the min or lowered to the max.
 3. **Role binding override** (`rbac.role_binding[i].token_max_expiration`) — if set on the matched binding, overrides the expiry to this duration from _now_.
 4. **RBAC default** (`rbac.token_max_expiration`) — if no role binding override is set and this is configured, the expiry is capped at this duration from _now_.
-5. **NATS token bounds** (`nats.token_bounds.min` / `nats.token_bounds.max`) — the final expiry is clamped within these bounds.
+5. **NATS JWT expiry bounds** (`nats.jwt_expiry_bounds.min` / `nats.jwt_expiry_bounds.max`) — the final expiry is clamped within these bounds.
 6. **IDP ceiling** — the IDP-provided expiry is enforced as an absolute upper bound. No override (role binding, RBAC, or NATS bounds) may extend the issued token beyond the lifetime the IDP originally granted.
 
 ::: {.callout-note}

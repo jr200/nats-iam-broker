@@ -24,8 +24,6 @@ service:
   account:
     name: "test"
     signing_nkey: "SUAGJBPRRXFQL2DXLG4CXW5D6XTLJ4DDMMKHNCIAPNK2Y4IZFHTJM6HN"
-    encryption:
-      enabled: true
 idp:
   - description: "Test IDP"
     issuer_url: "https://test.idp"

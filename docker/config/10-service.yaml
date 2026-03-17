@@ -4,7 +4,7 @@ params:
 
 nats:
   url: '{{ env "NATS_URL" }}'
-  token_bounds:
+  jwt_expiry_bounds:
     min: 1m
     max: 24h
 
@@ -17,6 +17,4 @@ service:
   account:
     name: '{{ env "IAM_ACCOUNT_NAME" }}'
     signing_nkey: '{{ readFile "$IAM_ACCOUNT_SIGNK" }}'
-    encryption:
-      enabled: true
-      xkey_secret: '{{ readNthLine 1 (env "IAM_SERVICE_XK") }}'
+    xkey_seed: '{{ readNthLine 1 (env "IAM_SERVICE_XK") }}'
