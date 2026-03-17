@@ -2,16 +2,24 @@
 title: "Prometheus Metrics"
 ---
 
-The broker can expose Prometheus metrics via an HTTP endpoint. Enable with the `-metrics` flag:
+The broker can expose Prometheus metrics via an HTTP endpoint. Enable with the `--metrics` flag:
 
 ```bash
-nats-iam-broker -metrics -metrics-port 8080 config.yaml
+nats-iam-broker serve --metrics --metrics-port 8080 config.yaml
 ```
 
 | Flag | Default | Description |
 | ---- | ------- | ----------- |
-| `-metrics` | `false` | Enable the Prometheus metrics endpoint |
-| `-metrics-port` | `8080` | Port for the metrics HTTP server |
+| `--metrics` | `false` | Enable the Prometheus metrics endpoint |
+| `--metrics-port` | `8080` | Port for the metrics HTTP server |
+
+These can also be set in YAML configuration under the `server:` section:
+
+```yaml
+server:
+  metrics: true
+  metrics_port: 8080
+```
 
 ## Endpoints
 
@@ -38,9 +46,9 @@ nats-iam-broker -metrics -metrics-port 8080 config.yaml
 When deploying with the Helm chart, metrics can be enabled in `values.yaml`:
 
 ```yaml
-metrics:
-  enabled: true
-  port: 8080
+server:
+  metrics: true
+  metrics_port: 8080
   serviceMonitor:
     enabled: true      # requires Prometheus Operator
     interval: 30s

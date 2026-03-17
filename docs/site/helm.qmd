@@ -36,42 +36,70 @@ The generated `nats-secrets.yaml` can be uploaded to the nats-iam-broker target 
 
 ## Configuration
 
-The following table lists the configurable parameters of the `nats-iam-broker` chart and their default values.
+The chart renders the complete application config as a single ConfigMap mounted at `/config/config.yaml`. All application settings are configured under `config:` and `server:` in `values.yaml`.
+
+### Server Settings
 
 | Parameter | Description | Default |
 | --------- | ----------- | ------- |
-| `devDebug` | Enable or disable debug mode for development | `false` |
-| `replicaCount` | Number of replicas for the deployment | `1` |
-| `image.repository` | The Docker image repository | `ghcr.io/jr200/nats-iam-broker` |
-| `image.pullPolicy` | The image pull policy (Always, IfNotPresent, Never) | `Always` |
-| `image.tag` | Overrides the image tag whose default is the chart appVersion | `""` |
+| `server.log_level` | Log level (disabled, panic, fatal, error, warn, info, debug, trace) | `info` |
+| `server.log_format` | Log format (json, human) | `json` |
+| `server.log_sensitive` | Enable sensitive logging for debugging | `false` |
+| `server.metrics` | Enable Prometheus metrics endpoint | `false` |
+| `server.metrics_port` | Port for the metrics HTTP server | `8080` |
+| `server.watch` | Enable hot-reload of config files | `false` |
+| `server.serviceMonitor.enabled` | Create a Prometheus ServiceMonitor resource | `false` |
+| `server.serviceMonitor.interval` | Prometheus scrape interval | `30s` |
+| `server.serviceMonitor.labels` | Additional labels for the ServiceMonitor | `{}` |
+
+### Application Config
+
+| Parameter | Description | Default |
+| --------- | ----------- | ------- |
+| `config.nats.url` | NATS server URL | `nats://nats:4222` |
+| `config.nats.jwt_expiry_bounds.min` | Minimum lifetime for minted NATS JWTs | `1m` |
+| `config.nats.jwt_expiry_bounds.max` | Maximum lifetime for minted NATS JWTs | `24h` |
+| `config.service.name` | Service name (required) | `""` |
+| `config.service.version` | Service version, semver (required) | `0.1.0` |
+| `config.service.description` | Service description (required) | `""` |
+| `config.service.creds_file` | Path to NATS user credentials file | `/secrets/user.creds` |
+| `config.service.account.name` | Account name (metadata) | `""` |
+| `config.service.account.signing_nkey` | Signing nkey (supports Go templates) | `""` |
+| `config.service.account.xkey_seed` | xkey seed for encrypted communication (supports Go templates) | `""` |
+| `config.idp` | List of IDP configurations | `[]` |
+| `config.rbac.token_max_expiration` | Default max expiry for minted NATS JWTs | `8h` |
+| `config.rbac.role_binding_matching_strategy` | Role binding matching strategy | `best_match` |
+| `config.rbac.auto_accounts_dir` | Directory to scan for auto-discovered accounts | - |
+| `config.rbac.user_accounts` | List of user accounts | `[]` |
+| `config.rbac.roles` | List of roles | `[]` |
+| `config.rbac.role_binding` | List of role bindings | `[]` |
+
+### Deployment Settings
+
+| Parameter | Description | Default |
+| --------- | ----------- | ------- |
+| `replicaCount` | Number of replicas | `1` |
+| `image.repository` | Docker image repository | `ghcr.io/jr200/nats-iam-broker` |
+| `image.pullPolicy` | Image pull policy | `IfNotPresent` |
+| `image.tag` | Override the image tag (default: chart appVersion) | `""` |
 | `imagePullSecrets` | Docker registry secrets | `[]` |
-| `nameOverride` | Override the default name of the chart | `""` |
-| `fullnameOverride` | Override the full name of the chart | `""` |
-| `logging.json` | Set to true to enable JSON logging | `false` |
-| `logging.level` | Set logging level (error, warn, info, debug, trace) | `trace` |
-| `env` | Environment variables for the nats-iam-broker container | See values.yaml |
-| `rbac.accounts` | Configuration of decentralized accounts that can sign newly minted NATS user JWTs | Example: see `values.yaml` |
-| `rbac.roles` | Roles (groups of permissions + limits) that can be attached to minted NATS user JWTs | Example: see `values.yaml` |
-| `rbac.bindings` | Configuration to associate RBAC roles to RBAC accounts | Example: see `values.yaml` |
-| `serviceAccount.create` | Specifies whether a service account should be created | `true` |
-| `serviceAccount.automount` | Automatically mount a ServiceAccount's API credentials | `true` |
-| `serviceAccount.annotations` | Annotations to add to the service account | `{}` |
-| `serviceAccount.name` | The name of the service account to use | `""` |
-| `podAnnotations` | Additional annotations to add to the pods | `{}` |
-| `podLabels` | Additional labels to add to the pods | `{}` |
-| `podSecurityContext` | Define security context for the pod | `{}` |
-| `securityContext` | Define security context for the container | `{}` |
-| `resources` | Resource requests and limits for the container | `{}` |
-| `volumes` | Additional volumes on the output Deployment definition | `[]` |
-| `volumeMounts` | Additional volumeMounts on the output Deployment definition | `[]` |
-| `nodeSelector` | Node selector for pod scheduling | `{}` |
-| `tolerations` | Tolerations for pod scheduling | `[]` |
-| `affinity` | Affinity rules for pod scheduling | `{}` |
-| `metrics.enabled` | Enable Prometheus metrics endpoint | `false` |
-| `metrics.port` | Port for the metrics HTTP server | `8080` |
-| `metrics.serviceMonitor.enabled` | Create a Prometheus ServiceMonitor resource | `false` |
-| `metrics.serviceMonitor.interval` | Prometheus scrape interval | `30s` |
-| `metrics.serviceMonitor.labels` | Additional labels for the ServiceMonitor | `{}` |
+| `nameOverride` | Override the chart name | `""` |
+| `fullnameOverride` | Override the full release name | `""` |
+| `serviceAccount.create` | Create a service account | `true` |
+| `serviceAccount.automount` | Automount service account API credentials | `true` |
+| `serviceAccount.annotations` | Annotations for the service account | `{}` |
+| `serviceAccount.name` | Service account name | `""` |
+| `podAnnotations` | Additional pod annotations | `{}` |
+| `podLabels` | Additional pod labels | `{}` |
+| `podSecurityContext` | Pod security context | `{}` |
+| `securityContext` | Container security context | `{}` |
+| `resources` | Resource requests and limits | `{}` |
+| `nodeSelector` | Node selector | `{}` |
+| `tolerations` | Tolerations | `[]` |
+| `affinity` | Affinity rules | `{}` |
+| `envFrom` | Inject env vars from Secrets/ConfigMaps | `[]` |
+| `env` | Additional env vars | `[]` |
+| `volumes` | Additional volumes | `[]` |
+| `volumeMounts` | Additional volume mounts | `[]` |
 
 For a complete list of configuration options, see the `values.yaml` file.
