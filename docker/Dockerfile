@@ -36,6 +36,6 @@ COPY --from=builder /usr/local/bin/nats-iam-broker /usr/local/bin/nats-iam-broke
 USER appuser
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD ["nats-iam-broker", "--help"] || exit 1
+    CMD ["nats-iam-broker", "version"] || exit 1
 
 ENTRYPOINT ["/docker-entrypoint.sh"]

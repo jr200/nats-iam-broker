@@ -16,4 +16,4 @@ export IAM_USER_CREDS="${SECRET_STORE}/${IAM_ACCOUNT_NAME}/user-minter.creds"
 export IAM_ACCOUNT_SIGNK="${SECRET_STORE}/${IAM_ACCOUNT_NAME}/acct-signing-key.nk"
 export IAM_SERVICE_XK="${SECRET_STORE}/${IAM_ACCOUNT_NAME}/acct-encryption-key.xk"
 
-nats-iam-broker "${@}" ${CONFIG_DIR}/*.yaml "${SCRIPT_DIR}"/rbac.yaml &
+nats-iam-broker serve "${@}" ${CONFIG_DIR}/*.yaml "${SCRIPT_DIR}"/rbac.yaml &

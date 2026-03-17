@@ -56,8 +56,8 @@ func TestMergeOptions(t *testing.T) {
 			WatchConfig:    true,
 		}
 		cliFlags := map[string]bool{
-			"log":           true,
-			"log-human":     true,
+			"log-level":     true,
+			"log-format":    true,
 			"log-sensitive": true,
 			"metrics":       true,
 			"metrics-port":  true,
@@ -88,8 +88,8 @@ func TestMergeOptions(t *testing.T) {
 			MetricsPort:    3000,
 		}
 		cliFlags := map[string]bool{
-			"log":          true,
-			"log-human":    true,
+			"log-level":    true,
+			"log-format":   true,
 			"metrics":      true,
 			"metrics-port": true,
 		}

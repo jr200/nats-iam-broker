@@ -14,7 +14,7 @@ export IAM_USER_CREDS="${SECRET_STORE}/MINT_01/user-minter.creds"
 export IAM_ACCOUNT_SIGNK="${SECRET_STORE}/MINT_01/acct-signing-key.nk"
 export IAM_SERVICE_XK="${SECRET_STORE}/MINT_01/acct-encryption-key.xk"
 
-nats-iam-broker "${@}" ${CONFIG_DIR}/env_minter.yaml ${CONFIG_DIR}/idp_public.yaml "${SCRIPT_DIR}"/green_rbac.yaml &
+nats-iam-broker serve "${@}" ${CONFIG_DIR}/env_minter.yaml ${CONFIG_DIR}/idp_public.yaml "${SCRIPT_DIR}"/green_rbac.yaml &
 
 # start the secondary minter
 
@@ -25,4 +25,4 @@ export IAM_USER_CREDS="${SECRET_STORE}/MINT_02/user-minter.creds"
 export IAM_ACCOUNT_SIGNK="${SECRET_STORE}/MINT_02/acct-signing-key.nk"
 export IAM_SERVICE_XK="${SECRET_STORE}/MINT_02/acct-encryption-key.xk"
 
-nats-iam-broker "${@}" ${CONFIG_DIR}/env_minter.yaml ${CONFIG_DIR}/idp_private.yaml "${SCRIPT_DIR}"/green_rbac.yaml &
+nats-iam-broker serve "${@}" ${CONFIG_DIR}/env_minter.yaml ${CONFIG_DIR}/idp_private.yaml "${SCRIPT_DIR}"/green_rbac.yaml &

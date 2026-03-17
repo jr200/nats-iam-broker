@@ -19,8 +19,9 @@
             "cwd": "${workspaceFolder}",
             "program": "${workspaceFolder}/cmd/nats-iam-broker/main.go",
             "args": [
-                "-log-human",
-                // "-log=trace",
+                "serve",
+                "--log-format", "human",
+                // "--log-level", "trace",
                 "${workspaceFolder}/configs/env_minter.yaml",
                 "${workspaceFolder}/configs/idp_private.yaml",
                 "${workspaceFolder}/configs/idp_public.yaml",
@@ -48,11 +49,12 @@
             "preLaunchTask": "init_debug_env",
             "program": "${workspaceFolder}/cmd/nats-iam-broker/main.go",
             "args": [
-                "-log", "trace",
-                "-log-sensitive",
-                "-log-human",
+                "serve",
+                "--log-level", "trace",
+                "--log-sensitive",
+                "--log-format", "human",
                 "${workspaceFolder}/docker/config/*.yaml",
-                "/tmp/nats-iam-broker/*.yaml",
+                "/tmp/nats-iam-broker/*.yaml"
             ],
             "envFile": "${workspaceFolder}/.env.local",
         }

@@ -10,8 +10,8 @@ services:
     networks:
       - infra-public
     command: >
-      -log trace 
-      -log-human
+      --log-level trace
+      --log-format human
     environment:
       # assumes zitadel and nats are containers connected to infra-public
       # exposed on ports 8080 and 4222 externally

@@ -79,7 +79,7 @@ if [ -n "${IAM_PORT_FORWARDS}" ]; then
 fi
 
 # start the nats-iam-broker
-echo "[CMD]" "nats-iam-broker" "$@" "${IAM_CONFIGS}"
+echo "[CMD]" "nats-iam-broker" "serve" "$@" "${IAM_CONFIGS}"
 
 # shellcheck disable=SC2086 # Allow word splitting and glob expansion for user args ($@) and config path (${IAM_CONFIGS})
-exec nats-iam-broker $@ ${IAM_CONFIGS}
+exec nats-iam-broker serve $@ ${IAM_CONFIGS}

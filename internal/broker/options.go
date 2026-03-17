@@ -77,11 +77,10 @@ func MergeOptions(yamlOpts Options, cliOpts *Options, cliFlags map[string]bool) 
 	}
 
 	// CLI flags override everything (only if explicitly set)
-	if cliFlags["log"] {
+	if cliFlags["log-level"] {
 		merged.LogLevel = cliOpts.LogLevel
 	}
-	if cliFlags["log-human"] {
-		// -log-human flag maps to LogFormat
+	if cliFlags["log-format"] {
 		merged.LogFormat = cliOpts.LogFormat
 	}
 	if cliFlags["log-sensitive"] {
