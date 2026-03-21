@@ -160,6 +160,13 @@ docker-offical-build:
 		.
 
 ################################################################################
+# Target: helm chart dependency update (regenerates Chart.lock)
+################################################################################
+.PHONY: chart-update-deps
+chart-update-deps:
+	helm dependency update charts/nats-iam-broker
+
+################################################################################
 # Target: helm chart dependencies
 ################################################################################
 .PHONY: chart-deps
