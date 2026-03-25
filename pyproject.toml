@@ -3,5 +3,5 @@ name = "nats-iam-broker"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
-    "quarto-cli>=1.8.27",
+    "quarto-cli>=1.9.36",
 ]

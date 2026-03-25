@@ -842,7 +842,7 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "quarto-cli", specifier = ">=1.8.27" }]
+requires-dist = [{ name = "quarto-cli", specifier = ">=1.9.36" }]
 
 [[package]]
 name = "nbclient"
@@ -1187,14 +1187,14 @@ wheels = [
 
 [[package]]
 name = "quarto-cli"
-version = "1.8.27"
+version = "1.9.36"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jupyter" },
     { name = "nbclient" },
     { name = "wheel" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/37/1c/91682258d62f14c7456fc5ee2a4ab70b6cdb924c0b5f6fd6a1558a1d1b44/quarto_cli-1.8.27.tar.gz", hash = "sha256:6373a0b378a97402bd856ed933d996b86d1eea3433beda5e443adb623e94a9a4", size = 4615, upload-time = "2026-01-16T09:23:04.515Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/96/116fe2555ff9cbbf73d8fed2582ba0277295ba7acd131cb779532fb11263/quarto_cli-1.9.36.tar.gz", hash = "sha256:c9e49793e478c019a1c979ba88b492b6a734c065b675b60d448aad3d094f2127", size = 4643, upload-time = "2026-03-20T20:29:56.996Z" }
 
 [[package]]
 name = "referencing"
