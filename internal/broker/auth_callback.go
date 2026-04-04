@@ -58,7 +58,7 @@ func handleAuthRequest(
 	}
 
 	// -- extract JWT --
-	_, extractSpan := tracer.Start(reqCtx, "auth.callout.extract_jwt")
+	_, extractSpan := getTracer().Start(reqCtx, "auth.callout.extract_jwt")
 	idpRawJwt, tokenReq := extractJWT(srvCtx, request)
 	if idpRawJwt == "" {
 		extractSpan.SetStatus(codes.Error, "no valid JWT token found")
@@ -69,7 +69,7 @@ func handleAuthRequest(
 	extractSpan.End()
 
 	// -- verify IDP --
-	verifyCtx, verifySpan := tracer.Start(reqCtx, "auth.callout.verify_idp")
+	verifyCtx, verifySpan := getTracer().Start(reqCtx, "auth.callout.verify_idp")
 	reqClaims, matchedVerifier, _, err := verifyAndEnrich(verifyCtx, m, idpRawJwt, tokenReq, idpVerifiers)
 	if err != nil {
 		verifySpan.SetStatus(codes.Error, err.Error())
@@ -92,7 +92,7 @@ func handleAuthRequest(
 	}
 
 	// -- build claims --
-	_, buildSpan := tracer.Start(reqCtx, "auth.callout.build_claims")
+	_, buildSpan := getTracer().Start(reqCtx, "auth.callout.build_claims")
 	claims, signingKeyPair, userAccountInfo, resultStatus, err := buildUserClaims(srvCtx, config, configManager, reqClaims, matchedVerifier, request)
 	if err != nil {
 		buildSpan.SetStatus(codes.Error, err.Error())
@@ -111,7 +111,7 @@ func handleAuthRequest(
 	buildSpan.End()
 
 	// -- audit --
-	auditCtx, auditSpan := tracer.Start(reqCtx, "auth.callout.audit")
+	auditCtx, auditSpan := getTracer().Start(reqCtx, "auth.callout.audit")
 	publishAuditEvent(auditCtx, nc, auditEventSubject, config, claims, request, reqClaims, matchedVerifier, userAccountInfo)
 	auditSpan.End()
 

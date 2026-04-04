@@ -85,3 +85,29 @@ func Setup(ctx context.Context, serviceName, serviceVersion string) (func(contex
 
 	return tp.Shutdown, nil
 }
+
+// SetupWithExporter initialises a TracerProvider with the given exporter,
+// bypassing env-var detection. Intended for testing.
+func SetupWithExporter(ctx context.Context, serviceName, serviceVersion string, exporter sdktrace.SpanExporter) (func(context.Context) error, error) {
+	res, err := resource.New(ctx, resource.WithAttributes(
+		semconv.ServiceName(serviceName),
+		semconv.ServiceVersion(serviceVersion),
+		semconv.TelemetrySDKLanguageGo,
+	))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create OTel resource: %w", err)
+	}
+
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithSyncer(exporter),
+		sdktrace.WithResource(res),
+	)
+
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
+
+	return tp.Shutdown, nil
+}

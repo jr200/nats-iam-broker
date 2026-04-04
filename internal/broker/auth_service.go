@@ -18,7 +18,13 @@ import (
 	"go.uber.org/zap"
 )
 
-var tracer = otel.Tracer("github.com/jr200/nats-iam-broker")
+const tracerName = "github.com/jr200/nats-iam-broker"
+
+// tracer returns a Tracer from the current global TracerProvider.
+// Must not be cached at package init time — Setup() hasn't run yet.
+func getTracer() trace.Tracer {
+	return otel.Tracer(tracerName)
+}
 
 // SigningKeyInfo contains information about what type of key was used to sign
 type SigningKeyInfo struct {
@@ -128,7 +134,7 @@ func (a *AuthService) Handle(inRequest micro.Request) {
 	// NATS password/token; extractJWT parses this and returns the TokenRequest.
 	reqCtx := a.extractTraceContext(rc)
 
-	ctx, span := tracer.Start(reqCtx, "auth.callout.handle",
+	ctx, span := getTracer().Start(reqCtx, "auth.callout.handle",
 		trace.WithSpanKind(trace.SpanKindServer),
 		trace.WithAttributes(
 			attribute.String("nats.user_nkey", rc.UserNkey),
