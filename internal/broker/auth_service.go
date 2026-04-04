@@ -2,15 +2,23 @@ package broker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/jr200/nats-iam-broker/internal/metrics"
+	"github.com/jr200/nats-iam-broker/internal/tracing"
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nats.go/micro"
 	"github.com/nats-io/nkeys"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
+
+var tracer = otel.Tracer("github.com/jr200/nats-iam-broker")
 
 // SigningKeyInfo contains information about what type of key was used to sign
 type SigningKeyInfo struct {
@@ -115,23 +123,60 @@ func (a *AuthService) Handle(inRequest micro.Request) {
 		return
 	}
 
+	// Extract trace context from the TokenRequest embedded in ConnectOptions.
+	// The client sends a JSON TokenRequest with a traceparent field as the
+	// NATS password/token; extractJWT parses this and returns the TokenRequest.
+	reqCtx := a.extractTraceContext(rc)
+
+	ctx, span := tracer.Start(reqCtx, "auth.callout.handle",
+		trace.WithSpanKind(trace.SpanKindServer),
+		trace.WithAttributes(
+			attribute.String("nats.user_nkey", rc.UserNkey),
+			attribute.String("nats.server_id", rc.Server.ID),
+		),
+	)
+	defer span.End()
+
 	userNkey := rc.UserNkey
 	serverID := rc.Server.ID
 
 	var sk nkeys.KeyPair
 	var accountInfo *UserAccountInfo
-	reqCtx := context.Background()
-	claims, sk, accountInfo, err := a.createNewClaimsFn(reqCtx, rc)
+	claims, sk, accountInfo, err := a.createNewClaimsFn(ctx, rc)
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		span.RecordError(err)
 		a.Respond(inRequest, userNkey, serverID, "", err)
 		return
 	}
 
 	signedToken, err := ValidateAndSign(claims, sk, accountInfo)
-	if err != nil && a.metrics != nil {
-		a.metrics.ResponseErrors.WithLabelValues(metrics.StageSign).Inc()
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		span.RecordError(err)
+		if a.metrics != nil {
+			a.metrics.ResponseErrors.WithLabelValues(metrics.StageSign).Inc()
+		}
+	} else {
+		span.SetStatus(codes.Ok, "")
 	}
 	a.Respond(inRequest, userNkey, serverID, signedToken, err)
+}
+
+// extractTraceContext tries to extract a W3C traceparent from the auth request's
+// ConnectOptions (Token or Password field) by parsing it as a TokenRequest JSON.
+func (a *AuthService) extractTraceContext(rc *jwt.AuthorizationRequestClaims) context.Context {
+	var tokenReq TokenRequest
+	raw := rc.ConnectOptions.Token
+	if raw == "" {
+		raw = rc.ConnectOptions.Password
+	}
+	if raw != "" {
+		if err := json.Unmarshal([]byte(raw), &tokenReq); err == nil && tokenReq.Traceparent != "" {
+			return tracing.ExtractFromTraceparent(tokenReq.Traceparent)
+		}
+	}
+	return context.Background()
 }
 
 func (a *AuthService) Respond(req micro.Request, userNKey, serverID, userJwt string, err error) {

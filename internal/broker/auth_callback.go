@@ -7,9 +7,13 @@ import (
 	"time"
 
 	"github.com/jr200/nats-iam-broker/internal/metrics"
+	"github.com/jr200/nats-iam-broker/internal/tracing"
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -53,17 +57,29 @@ func handleAuthRequest(
 		}
 	}
 
+	// -- extract JWT --
+	_, extractSpan := tracer.Start(reqCtx, "auth.callout.extract_jwt")
 	idpRawJwt, tokenReq := extractJWT(srvCtx, request)
 	if idpRawJwt == "" {
+		extractSpan.SetStatus(codes.Error, "no valid JWT token found")
+		extractSpan.End()
 		recordResult(metrics.StatusError)
 		return nil, nil, nil, fmt.Errorf("no valid JWT token found in request")
 	}
+	extractSpan.End()
 
-	reqClaims, matchedVerifier, _, err := verifyAndEnrich(reqCtx, m, idpRawJwt, tokenReq, idpVerifiers)
+	// -- verify IDP --
+	verifyCtx, verifySpan := tracer.Start(reqCtx, "auth.callout.verify_idp")
+	reqClaims, matchedVerifier, _, err := verifyAndEnrich(verifyCtx, m, idpRawJwt, tokenReq, idpVerifiers)
 	if err != nil {
+		verifySpan.SetStatus(codes.Error, err.Error())
+		verifySpan.RecordError(err)
+		verifySpan.End()
 		recordResult(metrics.StatusDenied)
 		return nil, nil, nil, err
 	}
+	verifySpan.SetAttributes(attribute.String("auth.idp", matchedVerifier.config.Description))
+	verifySpan.End()
 
 	// Merge in client information from the request
 	reqJwtClaims := reqClaims.toMap()
@@ -75,13 +91,42 @@ func handleAuthRequest(
 		zap.L().Debug("reqClaims", zap.Any("claims", reqClaims.toMap()))
 	}
 
+	// -- build claims --
+	_, buildSpan := tracer.Start(reqCtx, "auth.callout.build_claims")
 	claims, signingKeyPair, userAccountInfo, resultStatus, err := buildUserClaims(srvCtx, config, configManager, reqClaims, matchedVerifier, request)
 	if err != nil {
+		buildSpan.SetStatus(codes.Error, err.Error())
+		buildSpan.RecordError(err)
+		buildSpan.End()
 		recordResult(resultStatus)
 		return nil, nil, nil, err
 	}
+	buildSpanAttrs := []attribute.KeyValue{
+		attribute.String("auth.account", claims.Audience),
+	}
+	if srvCtx.Options.LogSensitive {
+		buildSpanAttrs = append(buildSpanAttrs, attribute.String("auth.user.email", reqClaims.Email))
+	}
+	buildSpan.SetAttributes(buildSpanAttrs...)
+	buildSpan.End()
 
-	publishAuditEvent(nc, auditEventSubject, config, claims, request, reqClaims, matchedVerifier, userAccountInfo)
+	// -- audit --
+	auditCtx, auditSpan := tracer.Start(reqCtx, "auth.callout.audit")
+	publishAuditEvent(auditCtx, nc, auditEventSubject, config, claims, request, reqClaims, matchedVerifier, userAccountInfo)
+	auditSpan.End()
+
+	// Record result attributes on the parent span
+	span := trace.SpanFromContext(reqCtx)
+	spanAttrs := []attribute.KeyValue{
+		attribute.String("auth.idp", matchedVerifier.config.Description),
+		attribute.String("auth.account", claims.Audience),
+		attribute.String("auth.result", metrics.StatusSuccess),
+		attribute.String("auth.token.expires_at", time.Unix(claims.Expires, 0).Format(time.RFC3339)),
+	}
+	if srvCtx.Options.LogSensitive {
+		spanAttrs = append(spanAttrs, attribute.String("auth.user.email", reqClaims.Email))
+	}
+	span.SetAttributes(spanAttrs...)
 
 	recordResult(metrics.StatusSuccess)
 	if m != nil {
@@ -223,6 +268,7 @@ func buildUserClaims(
 }
 
 func publishAuditEvent(
+	ctx context.Context,
 	nc *nats.Conn,
 	auditEventSubject string,
 	config *Config,
@@ -263,8 +309,12 @@ func publishAuditEvent(
 		return
 	}
 
-	err = nc.Publish(fmt.Sprintf(auditEventSubject, claims.Audience, request.UserNkey), eventJSON)
-	if err != nil {
+	msg := &nats.Msg{
+		Subject: fmt.Sprintf(auditEventSubject, claims.Audience, request.UserNkey),
+		Data:    eventJSON,
+		Header:  tracing.InjectTraceContext(ctx, nil),
+	}
+	if err := nc.PublishMsg(msg); err != nil {
 		zap.L().Warn("failed to publish user creation event", zap.Error(err))
 	}
 }

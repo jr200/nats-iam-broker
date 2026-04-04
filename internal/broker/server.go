@@ -9,6 +9,7 @@ import (
 	internal "github.com/jr200/nats-iam-broker/internal"
 	"github.com/jr200/nats-iam-broker/internal/logging"
 	"github.com/jr200/nats-iam-broker/internal/metrics"
+	"github.com/jr200/nats-iam-broker/internal/tracing"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/micro"
 	"go.uber.org/zap"
@@ -56,6 +57,24 @@ func StartWithContext(ctx context.Context, configFiles []string, cliOpts *Option
 		accountNames[i] = acct.Name
 	}
 	zap.L().Info("available RBAC accounts", zap.Strings("accounts", accountNames))
+
+	// Start tracing (OTLP gRPC if OTEL_EXPORTER_OTLP_ENDPOINT is set,
+	// console if OTEL_TRACES_EXPORTER=console, otherwise no-op).
+	shutdownTracing, err := tracing.Setup(ctx, config.Service.Name, config.Service.Version)
+	if err != nil {
+		zap.L().Warn("failed to initialise OTel tracing, continuing without tracing", zap.Error(err))
+	} else {
+		defer func() {
+			// Use a fresh context with timeout — the parent ctx is already cancelled
+			// by the time defers run, and we need a live context to flush pending spans.
+			//nolint:mnd // matches metrics.shutdownTimeout
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := shutdownTracing(shutdownCtx); err != nil {
+				zap.L().Warn("error shutting down OTel tracing", zap.Error(err))
+			}
+		}()
+	}
 
 	// Start metrics server if enabled
 	var m *metrics.Metrics

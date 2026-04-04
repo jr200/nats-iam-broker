@@ -126,6 +126,7 @@ type TokenRequest struct {
 	IDToken      string `json:"id_token"`
 	RefreshToken string `json:"refresh_token"`
 	TokenType    string `json:"token_type"`
+	Traceparent  string `json:"traceparent"`
 }
 
 type ConfigManager struct {

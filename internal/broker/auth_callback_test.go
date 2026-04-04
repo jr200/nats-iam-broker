@@ -8,11 +8,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jr200/nats-iam-broker/internal/tracing"
 	"github.com/nats-io/jwt/v2"
+	natsserver "github.com/nats-io/nats-server/v2/server"
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
+
+func ensurePropagator(t *testing.T) {
+	t.Helper()
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+}
 
 // testFixture builds a minimal but complete set of keys, config, and claims
 // needed to exercise the auth callback logic end-to-end.
@@ -347,6 +358,78 @@ func TestPublishAuditEvent_Format(t *testing.T) {
 	assert.Equal(t, "Test IDP", parsed["idp"])
 	assert.NotEmpty(t, parsed["created_at"])
 	assert.NotEmpty(t, parsed["expires_at"])
+}
+
+func TestPublishAuditEvent_TraceparentHeader(t *testing.T) {
+	ensurePropagator(t)
+	f := newTestFixture(t)
+
+	// Start an embedded NATS server
+	opts := &natsserver.Options{
+		Host: "127.0.0.1",
+		Port: -1, // random port
+	}
+	ns, err := natsserver.NewServer(opts)
+	require.NoError(t, err)
+	go ns.Start()
+	if !ns.ReadyForConnections(5 * time.Second) {
+		t.Fatal("NATS server failed to start")
+	}
+	defer ns.Shutdown()
+
+	nc, err := nats.Connect(ns.ClientURL())
+	require.NoError(t, err)
+	defer nc.Close()
+
+	// Subscribe to the audit subject
+	auditSubject := "test-svc.evt.audit.account.test-account.user." + f.userPub + ".created"
+	sub, err := nc.SubscribeSync(auditSubject)
+	require.NoError(t, err)
+	require.NoError(t, nc.Flush())
+
+	// Create a context with a known trace (via traceparent extraction, same as production path)
+	tp := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	ctx := tracing.ExtractFromTraceparent(tp)
+
+	// Build test data
+	claims := &jwt.UserClaims{}
+	claims.Subject = f.userPub
+	claims.Audience = "test-account"
+	claims.Expires = time.Now().Add(30 * time.Minute).Unix()
+
+	request := &jwt.AuthorizationRequestClaims{}
+	request.UserNkey = f.userPub
+	request.ConnectOptions.Username = "traceuser"
+
+	idpClaims := &IdpJwtClaims{Email: "trace@test.com", Name: "Trace User"}
+	accountInfo := &UserAccountInfo{
+		Name:        "test-account",
+		PublicKey:   f.accountPub,
+		SigningNKey: NKey{KeyPair: f.signingKP},
+	}
+
+	// Publish with trace context
+	publishAuditEvent(ctx, nc, "test-svc.evt.audit.account.%s.user.%s.created",
+		f.config, claims, request, idpClaims, fakeIdpVerifier(), accountInfo)
+	require.NoError(t, nc.Flush())
+
+	// Receive and verify traceparent header
+	msg, err := sub.NextMsg(2 * time.Second)
+	require.NoError(t, err)
+	assert.NotNil(t, msg.Header)
+
+	// nats.Header is case-sensitive; W3C propagator uses lowercase "traceparent"
+	traceparent := msg.Header.Get("traceparent")
+	assert.NotEmpty(t, traceparent, "expected traceparent header on audit message")
+	assert.Contains(t, traceparent, "4bf92f3577b34da6a3ce929d0e0e4736",
+		"traceparent should contain the original trace ID")
+
+	// Verify the trace context can be extracted by a downstream consumer
+	extractedCtx := tracing.ExtractTraceContext(msg.Header)
+	extractedSC := trace.SpanContextFromContext(extractedCtx)
+	assert.True(t, extractedSC.IsValid())
+	expectedTraceID, _ := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
+	assert.Equal(t, expectedTraceID, extractedSC.TraceID())
 }
 
 func TestExtractJWT(t *testing.T) {

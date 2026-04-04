@@ -1,11 +1,97 @@
 package broker
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nkeys"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
+
+func init() {
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+}
+
+func TestExtractTraceContext(t *testing.T) {
+	a := &AuthService{ctx: &Context{Options: &Options{}}}
+
+	t.Run("valid JSON with traceparent", func(t *testing.T) {
+		tp := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+		tokenReq := TokenRequest{
+			IDToken:     "some-jwt",
+			Traceparent: tp,
+		}
+		raw, _ := json.Marshal(tokenReq)
+
+		rc := &jwt.AuthorizationRequestClaims{}
+		rc.ConnectOptions.Token = string(raw)
+
+		ctx := a.extractTraceContext(rc)
+		sc := trace.SpanContextFromContext(ctx)
+		if !sc.IsValid() {
+			t.Fatal("expected valid span context")
+		}
+		if sc.TraceID().String() != "4bf92f3577b34da6a3ce929d0e0e4736" {
+			t.Errorf("unexpected trace ID: %s", sc.TraceID())
+		}
+	})
+
+	t.Run("valid JSON without traceparent", func(t *testing.T) {
+		tokenReq := TokenRequest{IDToken: "some-jwt"}
+		raw, _ := json.Marshal(tokenReq)
+
+		rc := &jwt.AuthorizationRequestClaims{}
+		rc.ConnectOptions.Token = string(raw)
+
+		ctx := a.extractTraceContext(rc)
+		sc := trace.SpanContextFromContext(ctx)
+		if sc.IsValid() {
+			t.Error("expected invalid span context when no traceparent")
+		}
+	})
+
+	t.Run("raw JWT string (non-JSON)", func(t *testing.T) {
+		rc := &jwt.AuthorizationRequestClaims{}
+		rc.ConnectOptions.Token = "eyJhbGciOiJSUzI1NiJ9.payload.sig"
+
+		ctx := a.extractTraceContext(rc)
+		sc := trace.SpanContextFromContext(ctx)
+		if sc.IsValid() {
+			t.Error("expected invalid span context from raw JWT")
+		}
+	})
+
+	t.Run("empty token and password", func(t *testing.T) {
+		rc := &jwt.AuthorizationRequestClaims{}
+
+		ctx := a.extractTraceContext(rc)
+		sc := trace.SpanContextFromContext(ctx)
+		if sc.IsValid() {
+			t.Error("expected invalid span context from empty fields")
+		}
+	})
+
+	t.Run("traceparent in password field", func(t *testing.T) {
+		tp := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+		tokenReq := TokenRequest{
+			IDToken:     "some-jwt",
+			Traceparent: tp,
+		}
+		raw, _ := json.Marshal(tokenReq)
+
+		rc := &jwt.AuthorizationRequestClaims{}
+		rc.ConnectOptions.Password = string(raw)
+
+		ctx := a.extractTraceContext(rc)
+		sc := trace.SpanContextFromContext(ctx)
+		if !sc.IsValid() {
+			t.Fatal("expected valid span context from password field")
+		}
+	})
+}
 
 func TestValidateAndSign(t *testing.T) {
 	// Helper function to create fresh key pairs for each test
