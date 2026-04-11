@@ -1,24 +1,24 @@
 module github.com/jr200/nats-iam-broker
 
-go 1.26.1
+go 1.26.2
 
 require (
-	github.com/coreos/go-oidc/v3 v3.17.0
+	github.com/coreos/go-oidc/v3 v3.18.0
 	github.com/expr-lang/expr v1.17.8
 	github.com/fsnotify/fsnotify v1.9.0
-	github.com/go-jose/go-jose/v4 v4.1.3
+	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/go-playground/validator v9.31.0+incompatible
 	github.com/goccy/go-yaml v1.19.2
 	github.com/nats-io/jwt/v2 v2.8.1
 	github.com/nats-io/nats-server/v2 v2.12.6
-	github.com/nats-io/nats.go v1.49.0
+	github.com/nats-io/nats.go v1.50.0
 	github.com/nats-io/nkeys v0.4.15
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
 	github.com/xhit/go-str2duration/v2 v2.1.0
-	go.opentelemetry.io/contrib/bridges/otelzap v0.17.0
+	go.opentelemetry.io/contrib/bridges/otelzap v0.18.0
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.19.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.43.0
