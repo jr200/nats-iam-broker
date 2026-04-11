@@ -26,14 +26,14 @@ on:
 
 jobs:
   configure:
-    uses: jr200/github-action-templates/.github/workflows/preconfigure.yml@main
+    uses: jr200-labs/github-action-templates/.github/workflows/preconfigure.yml@main
     with:
       event_name: ${{ toJson(github.event_name) }}
       event: ${{ toJson(github.event) }}
 
   main:
     needs: configure
-    uses: jr200/github-action-templates/.github/workflows/build_docker_image_multiplatform.yml@main
+    uses: jr200-labs/github-action-templates/.github/workflows/build_docker_image_multiplatform.yml@main
     with:
       checkout-ref: ${{ fromJson(needs.configure.outputs.context).checkout-ref }}
       registry_name: ghcr.io
