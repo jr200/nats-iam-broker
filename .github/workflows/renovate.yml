@@ -1,0 +1,36 @@
+name: renovate
+
+# Self-hosted Renovate via the shared template at jr200/github-action-templates.
+# Replaces Mend Cloud's hosted Renovate. Runs on cron + manual trigger.
+# Per-repo behaviour is configured via this repo's renovate.json which extends
+# `github>jr200/github-action-templates`.
+
+on:
+  schedule:
+    # Every 4 hours, offset by 17 minutes to avoid the GitHub cron rush.
+    - cron: '17 */4 * * *'
+  workflow_dispatch:
+    inputs:
+      log-level:
+        description: Renovate log level
+        required: false
+        type: choice
+        default: info
+        options: [info, debug, trace]
+      dry-run:
+        description: Renovate dry-run mode (leave empty for normal)
+        required: false
+        type: choice
+        default: ''
+        options: ['', full, extract, lookup]
+
+jobs:
+  renovate:
+    uses: jr200/github-action-templates/.github/workflows/renovate.yml@main
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    with:
+      log-level: ${{ inputs.log-level || 'info' }}
+      dry-run: ${{ inputs.dry-run || '' }}
