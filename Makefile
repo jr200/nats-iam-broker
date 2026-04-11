@@ -31,8 +31,14 @@ lint:
 build:
 	go mod tidy
 	go mod download
+	# -X internal/version.Version: bake the VERSION read from pyproject.toml
+	# into the binary so it self-reports correctly. The broker startup log
+	# line, NATS micro registration, and OTel resource attributes all read
+	# this through internal/broker.ResolveServiceVersion. See
+	# internal/version/version.go for the precedence chain.
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) \
-	go build -o build/nats-iam-broker-$(GOOS)-$(GOARCH) -ldflags '-extldflags "-static"' \
+	go build -o build/nats-iam-broker-$(GOOS)-$(GOARCH) \
+	-ldflags '-extldflags "-static" -X github.com/jr200-labs/nats-iam-broker/internal/version.Version=v$(VERSION)' \
 	./cmd/nats-iam-broker/
 
 clean:

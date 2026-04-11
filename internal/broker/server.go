@@ -59,9 +59,15 @@ func StartWithContext(ctx context.Context, configFiles []string, cliOpts *Option
 	}
 	zap.L().Info("available RBAC accounts", zap.Strings("accounts", accountNames))
 
+	// Resolve the effective service version once and reuse it for OTel,
+	// the startup log line, and NATS micro registration. The chain is
+	// IAM_SERVICE_VERSION env -> ldflags-injected build version ->
+	// YAML config field -> "dev". See version_resolver.go.
+	effectiveVersion := ResolveServiceVersion(config.Service.Version)
+
 	// Start tracing and logging (OTLP gRPC if OTEL_EXPORTER_OTLP_ENDPOINT is set,
 	// console if OTEL_TRACES_EXPORTER=console, otherwise no-op).
-	otelResult, err := tracing.Setup(ctx, config.Service.Name, config.Service.Version)
+	otelResult, err := tracing.Setup(ctx, config.Service.Name, effectiveVersion)
 	if err != nil {
 		zap.L().Warn("failed to initialise OTel, continuing without tracing", zap.Error(err))
 	} else {
@@ -185,11 +191,11 @@ func StartWithContext(ctx context.Context, configFiles []string, cliOpts *Option
 	authCallback := newAuthCallbackWithWatcher(srvCtx, m, nc, watcher)
 	auth := NewAuthService(srvCtx, config.Service.Account.SigningNKey.KeyPair, config.serviceEncryptionXkey(), authCallback, m)
 
-	zap.L().Info("starting service", zap.String("version", config.Service.Version))
+	zap.L().Info("starting service", zap.String("version", effectiveVersion))
 
 	_, err = micro.AddService(nc, micro.Config{
 		Name:        config.Service.Name,
-		Version:     config.Service.Version,
+		Version:     effectiveVersion,
 		Description: config.Service.Description,
 		Endpoint: &micro.EndpointConfig{
 			Subject: "$SYS.REQ.USER.AUTH",

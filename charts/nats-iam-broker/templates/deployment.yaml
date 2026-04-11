@@ -60,10 +60,18 @@ spec:
           envFrom:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.env }}
+          # IAM_SERVICE_VERSION is always injected so the broker self-reports
+          # the deployed image tag in logs / NATS micro / OTel resource attrs
+          # without requiring the YAML config's service.version field. The
+          # broker's ResolveServiceVersion picks this up first (see
+          # internal/broker/version_resolver.go). User-provided .Values.env
+          # entries are appended after and can override if needed.
           env:
+            - name: IAM_SERVICE_VERSION
+              value: {{ .Values.image.tag | default .Chart.AppVersion | quote }}
+            {{- with .Values.env }}
             {{- toYaml . | nindent 12 }}
-          {{- end }}
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:

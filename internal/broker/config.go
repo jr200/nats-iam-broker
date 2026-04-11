@@ -71,7 +71,13 @@ type NATS struct {
 type Service struct {
 	Name        string         `yaml:"name" validate:"required"`
 	Description string         `yaml:"description" validate:"required"`
-	Version     string         `yaml:"version" validate:"required,semver"`
+	// Version is optional. If empty, the broker resolves the runtime
+	// service version from (in order) the IAM_SERVICE_VERSION env var,
+	// the ldflags-injected internal/version.Version, then "dev". See
+	// internal/broker.ResolveServiceVersion. When provided, must still
+	// be valid semver. Historically required; relaxed in v1.3.0 so the
+	// running image tag (injected via Helm) becomes the source of truth.
+	Version     string         `yaml:"version" validate:"omitempty,semver"`
 	CredsFile   string         `yaml:"creds_file" validate:"required"`
 	Account     ServiceAccount `yaml:"account" validate:"required"`
 }

@@ -117,8 +117,12 @@ config:
     # (spaces, tabs, '.', '*', '>', '/') are automatically sanitized.
     name: ""
 
-    # Semantic version string (required). Must follow semver format (e.g. "1.2.3").
-    version: "0.1.0"
+    # Semantic version string. Optional since chart 1.1.0 / app v1.3.0:
+    # the chart now injects IAM_SERVICE_VERSION (sourced from .Values.image.tag)
+    # as a container env var, and the broker prefers that over this YAML field.
+    # If you set it here it must still be valid semver. Leave empty to defer
+    # entirely to the image tag, which is the recommended path.
+    version: ""
 
     # Human-readable description of the service (required).
     description: ""
