@@ -1,1 +1,1 @@
-Sitemap: https://jr200.github.io/nats-iam-broker/sitemap.xml
+Sitemap: https://jr200-labs.github.io/nats-iam-broker/sitemap.xml
