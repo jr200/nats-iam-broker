@@ -10,7 +10,7 @@ import (
 
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
-	internal "github.com/jr200/nats-iam-broker/internal"
+	internal "github.com/jr200-labs/nats-iam-broker/internal"
 
 	"github.com/nats-io/jwt/v2"
 	"go.uber.org/zap"

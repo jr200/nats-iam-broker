@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jr200/nats-iam-broker/internal/metrics"
-	"github.com/jr200/nats-iam-broker/internal/tracing"
+	"github.com/jr200-labs/nats-iam-broker/internal/metrics"
+	"github.com/jr200-labs/nats-iam-broker/internal/tracing"
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nats.go/micro"
 	"github.com/nats-io/nkeys"
@@ -18,7 +18,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const tracerName = "github.com/jr200/nats-iam-broker"
+const tracerName = "github.com/jr200-labs/nats-iam-broker"
 
 // tracer returns a Tracer from the current global TracerProvider.
 // Must not be cached at package init time — Setup() hasn't run yet.

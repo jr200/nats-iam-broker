@@ -5,7 +5,7 @@ project:
 website:
   title: "nats-iam-broker"
   description: "Decentralised Auth Callout for NATS"
-  repo-url: https://github.com/jr200/nats-iam-broker
+  repo-url: https://github.com/jr200-labs/nats-iam-broker
   repo-actions: [issue, source]
 
   navbar:
@@ -33,7 +33,7 @@ website:
         text: Helm Chart
     right:
       - icon: github
-        href: https://github.com/jr200/nats-iam-broker
+        href: https://github.com/jr200-labs/nats-iam-broker
 
   sidebar:
     - title: "Guide"

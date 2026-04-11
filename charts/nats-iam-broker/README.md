@@ -45,7 +45,7 @@ The following table lists the configurable parameters of the `nats-iam-broker` c
 | --------------------------------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------- |
 | `devDebug`                                                | Enable or disable debug mode for development                                              | `false`                           |
 | `replicaCount`                                            | Number of replicas for the deployment                                                     | `1`                               |
-| `image.repository`                                        | The Docker image repository                                                               | `ghcr.io/jr200/nats-iam-broker`   |
+| `image.repository`                                        | The Docker image repository                                                               | `ghcr.io/jr200-labs/nats-iam-broker` |
 | `image.pullPolicy`                                        | The image pull policy (Always, IfNotPresent, Never)                                       | `Always`                          |
 | `image.tag`                                               | Overrides the image tag whose default is the chart appVersion                             | `""`                              |
 | `imagePullSecrets`                                        | Docker registry secrets                                                                   | `[]`                              |

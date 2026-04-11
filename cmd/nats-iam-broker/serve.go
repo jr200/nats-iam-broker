@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jr200/nats-iam-broker/internal/broker"
+	"github.com/jr200-labs/nats-iam-broker/internal/broker"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.uber.org/zap"

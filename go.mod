@@ -1,4 +1,4 @@
-module github.com/jr200/nats-iam-broker
+module github.com/jr200-labs/nats-iam-broker
 
 go 1.26.2
 

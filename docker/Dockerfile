@@ -20,7 +20,7 @@ RUN make build && \
 # minimal container
 FROM alpine:3
 
-LABEL org.opencontainers.image.source="https://github.com/jr200/nats-iam-broker"
+LABEL org.opencontainers.image.source="https://github.com/jr200-labs/nats-iam-broker"
 LABEL org.opencontainers.image.description="nats-iam-broker runtime stage"
 
 RUN apk add --no-cache bash ca-certificates jq && \

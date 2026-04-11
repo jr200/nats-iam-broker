@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jr200/nats-iam-broker/internal/tracing"
+	"github.com/jr200-labs/nats-iam-broker/internal/tracing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"

@@ -10,7 +10,7 @@ Please be respectful and constructive in all interactions. We are committed to p
 
 ### Reporting Issues
 
-- Use [GitHub Issues](https://github.com/jr200/nats-iam-broker/issues) to report bugs or request features.
+- Use [GitHub Issues](https://github.com/jr200-labs/nats-iam-broker/issues) to report bugs or request features.
 - Before creating a new issue, please check if a similar issue already exists.
 - Include as much detail as possible: steps to reproduce, expected vs actual behaviour, logs, and environment details.
 

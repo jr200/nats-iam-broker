@@ -79,7 +79,7 @@ The chart renders the complete application config as a single ConfigMap mounted 
 | Parameter | Description | Default |
 | --------- | ----------- | ------- |
 | `replicaCount` | Number of replicas | `1` |
-| `image.repository` | Docker image repository | `ghcr.io/jr200/nats-iam-broker` |
+| `image.repository` | Docker image repository | `ghcr.io/jr200-labs/nats-iam-broker` |
 | `image.pullPolicy` | Image pull policy | `IfNotPresent` |
 | `image.tag` | Override the image tag (default: chart appVersion) | `""` |
 | `imagePullSecrets` | Docker registry secrets | `[]` |

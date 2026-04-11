@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jr200/nats-iam-broker/internal/metrics"
-	"github.com/jr200/nats-iam-broker/internal/tracing"
+	"github.com/jr200-labs/nats-iam-broker/internal/metrics"
+	"github.com/jr200-labs/nats-iam-broker/internal/tracing"
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"

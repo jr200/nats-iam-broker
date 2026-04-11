@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jr200/nats-iam-broker/internal/tracing"
+	"github.com/jr200-labs/nats-iam-broker/internal/tracing"
 	"github.com/nats-io/jwt/v2"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"

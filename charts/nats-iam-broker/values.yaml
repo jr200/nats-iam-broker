@@ -10,7 +10,7 @@ replicaCount: 1
 
 image:
   # Container image repository.
-  repository: ghcr.io/jr200/nats-iam-broker
+  repository: ghcr.io/jr200-labs/nats-iam-broker
   # Image pull policy. One of: Always, IfNotPresent, Never.
   pullPolicy: IfNotPresent
   # Overrides the image tag. Defaults to the chart's appVersion if empty.

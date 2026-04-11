@@ -5,7 +5,7 @@ package integration
 import (
 	"context"
 
-	"github.com/jr200/nats-iam-broker/internal/broker"
+	"github.com/jr200-labs/nats-iam-broker/internal/broker"
 )
 
 // brokerStartWithContext calls the broker package's StartWithContext function.

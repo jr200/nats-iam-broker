@@ -1,8 +1,8 @@
 services:
 
   nats-iam:
-    # https://github.com/jr200/nats-iam-broker/pkgs/container/nats-iam-broker
-    image: ghcr.io/jr200/nats-iam-broker:latest
+    # https://github.com/jr200-labs/nats-iam-broker/pkgs/container/nats-iam-broker
+    image: ghcr.io/jr200-labs/nats-iam-broker:latest
     restart: unless-stopped
     volumes:
     - ./nats-iam/rbac.yaml:/config/30-rbac.yaml
