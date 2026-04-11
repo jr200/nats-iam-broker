@@ -11,7 +11,7 @@ jobs:
     steps:
       - run: echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
       - name: dispatch-next-workflow
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         if: github.event_name != 'workflow_dispatch'
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
