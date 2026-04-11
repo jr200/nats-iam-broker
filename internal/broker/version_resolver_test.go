@@ -20,18 +20,18 @@ func TestResolveServiceVersion(t *testing.T) {
 		want           string
 	}{
 		{
-			name:           "env var wins over everything",
+			name:           "env var wins over everything (v-prefix stripped)",
 			envValue:       "v9.9.9-from-env",
 			ldflagsVersion: "v1.2.3",
 			yamlVersion:    "1.0.0",
-			want:           "v9.9.9-from-env",
+			want:           "9.9.9-from-env",
 		},
 		{
-			name:           "ldflags wins when env unset and ldflags non-dev",
+			name:           "ldflags wins when env unset (v-prefix stripped)",
 			envValue:       "",
 			ldflagsVersion: "v1.2.3",
 			yamlVersion:    "1.0.0",
-			want:           "v1.2.3",
+			want:           "1.2.3",
 		},
 		{
 			name:           "yaml fallback when env unset and ldflags is dev",
@@ -39,6 +39,20 @@ func TestResolveServiceVersion(t *testing.T) {
 			ldflagsVersion: "dev",
 			yamlVersion:    "1.0.0",
 			want:           "1.0.0",
+		},
+		{
+			name:           "yaml without v-prefix passes through unchanged",
+			envValue:       "",
+			ldflagsVersion: "dev",
+			yamlVersion:    "2.5.1",
+			want:           "2.5.1",
+		},
+		{
+			name:           "yaml WITH v-prefix gets stripped too",
+			envValue:       "",
+			ldflagsVersion: "dev",
+			yamlVersion:    "v2.5.1",
+			want:           "2.5.1",
 		},
 		{
 			name:           "literal dev fallback when nothing is set",
@@ -53,6 +67,13 @@ func TestResolveServiceVersion(t *testing.T) {
 			ldflagsVersion: "",
 			yamlVersion:    "1.0.0",
 			want:           "1.0.0",
+		},
+		{
+			name:           "env var without v-prefix passes through unchanged",
+			envValue:       "1.2.3-rc.1",
+			ldflagsVersion: "dev",
+			yamlVersion:    "",
+			want:           "1.2.3-rc.1",
 		},
 	}
 
