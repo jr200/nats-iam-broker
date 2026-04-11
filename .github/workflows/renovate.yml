@@ -28,11 +28,6 @@ on:
 jobs:
   renovate:
     uses: jr200-labs/github-action-templates/.github/workflows/renovate.yml@main
-    # secrets: inherit passes the org-level INTEGRATION_APP_PRIVATE_KEY
-    # through to the reusable workflow so it can mint a real App token.
-    # Without this the template falls back to GITHUB_TOKEN and cross-repo
-    # / ghcr.io lookups silently fail.
-    secrets: inherit
     permissions:
       contents: write
       pull-requests: write
@@ -40,3 +35,9 @@ jobs:
     with:
       log-level: ${{ inputs.log-level || 'info' }}
       dry-run: ${{ inputs.dry-run || '' }}
+    # The org-level INTEGRATION_APP_PRIVATE_KEY secret has to be passed
+    # explicitly because GitHub Actions does NOT inherit secrets across
+    # orgs (variables yes, secrets no). github-action-templates lives in
+    # jr200-labs and most callers live in whengas.
+    secrets:
+      INTEGRATION_APP_PRIVATE_KEY: ${{ secrets.INTEGRATION_APP_PRIVATE_KEY }}
