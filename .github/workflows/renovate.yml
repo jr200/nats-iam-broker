@@ -1,9 +1,10 @@
 name: renovate
 
-# Self-hosted Renovate via the shared template at jr200/github-action-templates.
-# Replaces Mend Cloud's hosted Renovate. Runs on cron + manual trigger.
-# Per-repo behaviour is configured via this repo's renovate.json which extends
-# `github>jr200/github-action-templates`.
+# Self-hosted Renovate via the shared template at
+# jr200-labs/github-action-templates. Replaces Mend Cloud's hosted
+# Renovate. Runs on cron + manual trigger. Per-repo behaviour is
+# configured via this repo's renovate.json which extends
+# `github>jr200-labs/github-action-templates`.
 
 on:
   schedule:
@@ -26,7 +27,12 @@ on:
 
 jobs:
   renovate:
-    uses: jr200/github-action-templates/.github/workflows/renovate.yml@main
+    uses: jr200-labs/github-action-templates/.github/workflows/renovate.yml@main
+    # secrets: inherit passes the org-level INTEGRATION_APP_PRIVATE_KEY
+    # through to the reusable workflow so it can mint a real App token.
+    # Without this the template falls back to GITHUB_TOKEN and cross-repo
+    # / ghcr.io lookups silently fail.
+    secrets: inherit
     permissions:
       contents: write
       pull-requests: write
