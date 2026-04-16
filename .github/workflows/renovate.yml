@@ -19,7 +19,6 @@ on:
         default: info
         options: [info, debug, trace]
       dry-run:
-      runner: self-hosted
         description: Renovate dry-run mode (leave empty for normal)
         required: false
         type: choice
