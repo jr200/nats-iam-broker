@@ -35,7 +35,7 @@ jobs:
     with:
       log-level: ${{ inputs.log-level || 'info' }}
       dry-run: ${{ inputs.dry-run || '' }}
-      runner: arc-linux
+      runner: arc-linux-whengas
     # The org-level INTEGRATION_APP_PRIVATE_KEY secret has to be passed
     # explicitly because GitHub Actions does NOT inherit secrets across
     # orgs (variables yes, secrets no). github-action-templates lives in
