@@ -19,6 +19,7 @@ on:
         default: info
         options: [info, debug, trace]
       dry-run:
+      runner: self-hosted
         description: Renovate dry-run mode (leave empty for normal)
         required: false
         type: choice
@@ -35,6 +36,7 @@ jobs:
     with:
       log-level: ${{ inputs.log-level || 'info' }}
       dry-run: ${{ inputs.dry-run || '' }}
+      runner: self-hosted
     # The org-level INTEGRATION_APP_PRIVATE_KEY secret has to be passed
     # explicitly because GitHub Actions does NOT inherit secrets across
     # orgs (variables yes, secrets no). github-action-templates lives in
