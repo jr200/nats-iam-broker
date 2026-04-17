@@ -32,7 +32,6 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
-      security-events: read
     with:
       log-level: ${{ inputs.log-level || 'info' }}
       dry-run: ${{ inputs.dry-run || '' }}
