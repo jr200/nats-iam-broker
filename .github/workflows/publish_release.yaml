@@ -20,14 +20,14 @@ on:
 
 jobs:
   configure:
-    uses: jr200-labs/github-action-templates/.github/workflows/preconfigure.yml@master
+    uses: jr200-labs/github-action-templates/.github/workflows/preconfigure.yaml@master
     with:
       event_name: ${{ toJson(github.event_name) }}
       event: ${{ toJson(github.event) }}
 
   main:
     needs: configure
-    uses: jr200-labs/github-action-templates/.github/workflows/publish_release.yml@master
+    uses: jr200-labs/github-action-templates/.github/workflows/publish_release.yaml@master
     with:
       checkout-ref: ${{ fromJson(needs.configure.outputs.context).checkout-ref }}
       tag: ${{ fromJson(needs.configure.outputs.context).tag }}

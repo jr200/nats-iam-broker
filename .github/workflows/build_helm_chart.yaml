@@ -25,14 +25,14 @@ on:
 
 jobs:
   configure:
-    uses: jr200-labs/github-action-templates/.github/workflows/preconfigure.yml@master
+    uses: jr200-labs/github-action-templates/.github/workflows/preconfigure.yaml@master
     with:
       event_name: ${{ toJson(github.event_name) }}
       event: ${{ toJson(github.event) }}
 
   main:
     needs: configure
-    uses: jr200-labs/github-action-templates/.github/workflows/build_helm_chart.yml@master
+    uses: jr200-labs/github-action-templates/.github/workflows/build_helm_chart.yaml@master
     with:
       checkout-ref: ${{ fromJson(needs.configure.outputs.context).checkout-ref }}
       chart_repo: ${{ fromJson(needs.configure.outputs.context).chart_repo }}

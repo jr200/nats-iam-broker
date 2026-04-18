@@ -27,7 +27,7 @@ on:
 
 jobs:
   renovate:
-    uses: jr200-labs/github-action-templates/.github/workflows/renovate.yml@master
+    uses: jr200-labs/github-action-templates/.github/workflows/renovate.yaml@master
     permissions:
       contents: write
       pull-requests: write
