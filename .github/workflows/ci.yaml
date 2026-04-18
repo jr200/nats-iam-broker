@@ -7,11 +7,4 @@ on:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - run: go vet ./...
-      - run: go test ./...
+    uses: jr200-labs/github-action-templates/.github/workflows/ci_go.yaml@master
