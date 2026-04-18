@@ -9,7 +9,7 @@ name: renovate
 on:
   schedule:
     # Every 4 hours, offset by 17 minutes to avoid the GitHub cron rush.
-    - cron: '17 */4 * * *'
+    - cron: '0 3 * * *'
   workflow_dispatch:
     inputs:
       log-level:
