@@ -3,6 +3,7 @@ package broker
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"time"
 
@@ -197,6 +198,7 @@ func StartWithContext(ctx context.Context, configFiles []string, cliOpts *Option
 		Name:        config.Service.Name,
 		Version:     effectiveVersion,
 		Description: config.Service.Description,
+		Metadata:    map[string]string{"go": runtime.Version()},
 		Endpoint: &micro.EndpointConfig{
 			Subject: "$SYS.REQ.USER.AUTH",
 			Handler: auth,
