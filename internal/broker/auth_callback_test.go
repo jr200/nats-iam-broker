@@ -176,8 +176,8 @@ func TestBuildUserClaims_EndToEnd(t *testing.T) {
 		assert.Equal(t, f.userPub, resultClaims.Subject)
 
 		// Verify permissions from role
-		assert.Contains(t, resultClaims.Pub.Allow, "test.>")
-		assert.Contains(t, resultClaims.Sub.Allow, "test.>")
+		assert.Contains(t, resultClaims.Permissions.Pub.Allow, "test.>")
+		assert.Contains(t, resultClaims.Permissions.Sub.Allow, "test.>")
 
 		// Verify expiry is clamped to IDP ceiling
 		assert.LessOrEqual(t, resultClaims.Expires, idpExpiry)
