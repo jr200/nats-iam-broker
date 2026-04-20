@@ -94,7 +94,7 @@ rbac:
 	require.NoError(t, err)
 	_, err = tmpFile.WriteString(configYAML)
 	require.NoError(t, err)
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	cm, err := NewConfigManager([]string{tmpFile.Name()})
 	require.NoError(t, err)
@@ -109,7 +109,7 @@ rbac:
 	ctx := NewServerContext(&Options{LogSensitive: false})
 
 	t.Cleanup(func() {
-		os.Remove(tmpFile.Name())
+		_ = os.Remove(tmpFile.Name())
 	})
 
 	return &testFixture{
@@ -259,10 +259,10 @@ rbac:
 
 		tmpFile, err := os.CreateTemp("", "expiry-test-*.yaml")
 		require.NoError(t, err)
-		defer os.Remove(tmpFile.Name())
+		defer func() { _ = os.Remove(tmpFile.Name()) }()
 		_, err = tmpFile.WriteString(longExpiryCfg)
 		require.NoError(t, err)
-		tmpFile.Close()
+		require.NoError(t, tmpFile.Close())
 
 		cm, err := NewConfigManager([]string{tmpFile.Name()})
 		require.NoError(t, err)

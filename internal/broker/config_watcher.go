@@ -72,7 +72,7 @@ func (cw *ConfigWatcher) Start() error {
 	dirs := uniqueDirs(paths)
 	for _, dir := range dirs {
 		if err := watcher.Add(dir); err != nil {
-			watcher.Close()
+			_ = watcher.Close()
 			return fmt.Errorf("failed to watch directory %s: %w", dir, err)
 		}
 		zap.L().Debug("watching directory for config changes", zap.String("dir", dir))
@@ -98,7 +98,7 @@ func (cw *ConfigWatcher) Start() error {
 func (cw *ConfigWatcher) Stop() {
 	close(cw.stopCh)
 	if cw.watcher != nil {
-		cw.watcher.Close()
+		_ = cw.watcher.Close()
 	}
 }
 

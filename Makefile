@@ -24,9 +24,15 @@ test-race:
 view-coverage: test-race
 	go tool cover -html=coverage.out
 
-lint:
+sync-shared-lint:
+	@mkdir -p .shared
+	@curl -sfL "https://raw.githubusercontent.com/jr200-labs/github-action-templates/master/shared/sync-shared-lint.sh" -o .shared/sync-shared-lint.sh
+	@chmod +x .shared/sync-shared-lint.sh
+	@./.shared/sync-shared-lint.sh go
+
+lint: sync-shared-lint
 	go vet ./...
-	golangci-lint run --timeout=5m
+	golangci-lint run --config .shared/.golangci.yml --timeout=5m
 
 build:
 	go mod tidy
