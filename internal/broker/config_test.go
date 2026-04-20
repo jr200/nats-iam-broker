@@ -59,7 +59,7 @@ rbac:
 	// Write test config to temp file
 	baseFile, err := os.CreateTemp("", "base-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(baseFile.Name())
+	defer func() { _ = os.Remove(baseFile.Name()) }()
 	_, err = baseFile.WriteString(baseConfig)
 	require.NoError(t, err)
 
@@ -527,7 +527,7 @@ rbac:
 
 	baseFile, err := os.CreateTemp("", "concurrent-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(baseFile.Name())
+	defer func() { _ = os.Remove(baseFile.Name()) }()
 	_, err = baseFile.WriteString(baseConfig)
 	require.NoError(t, err)
 

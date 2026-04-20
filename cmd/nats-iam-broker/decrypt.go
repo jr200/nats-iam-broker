@@ -56,7 +56,7 @@ func runDecodeNATSJWT(token string) error {
 	if err != nil {
 		return fmt.Errorf("error decoding NATS JWT: %w", err)
 	}
-	fmt.Fprintf(os.Stdout, "=== NATS JWT ===\n%s\n", decoded)
+	_, _ = fmt.Fprintf(os.Stdout, "=== NATS JWT ===\n%s\n", decoded)
 	return nil
 }
 
@@ -71,10 +71,10 @@ func runDecodeJWEToken(token, keyStr string) error {
 	if err != nil {
 		return fmt.Errorf("error marshalling JWE header: %w", err)
 	}
-	fmt.Fprintf(os.Stdout, "=== JWE Header ===\n%s\n", headerJSON)
+	_, _ = fmt.Fprintf(os.Stdout, "=== JWE Header ===\n%s\n", headerJSON)
 
 	if keyStr == "" {
-		fmt.Fprintf(os.Stdout, "\nNo --key provided; only header shown. Provide --key to decrypt payload.\n")
+		_, _ = fmt.Fprintf(os.Stdout, "\nNo --key provided; only header shown. Provide --key to decrypt payload.\n")
 		return nil
 	}
 
@@ -90,7 +90,7 @@ func runDecodeJWEToken(token, keyStr string) error {
 
 	// Try to decode as a NATS JWT
 	if decoded, err := tryDecodeNATSJWT(string(plaintext)); err == nil {
-		fmt.Fprintf(os.Stdout, "\n=== Decrypted NATS JWT ===\n%s\n", decoded)
+		_, _ = fmt.Fprintf(os.Stdout, "\n=== Decrypted NATS JWT ===\n%s\n", decoded)
 		return nil
 	}
 
@@ -100,13 +100,13 @@ func runDecodeJWEToken(token, keyStr string) error {
 		var buf []byte
 		buf, err = json.MarshalIndent(raw, "", "  ")
 		if err == nil {
-			fmt.Fprintf(os.Stdout, "\n=== Decrypted Payload (JSON) ===\n%s\n", buf)
+			_, _ = fmt.Fprintf(os.Stdout, "\n=== Decrypted Payload (JSON) ===\n%s\n", buf)
 			return nil
 		}
 	}
 
 	// Fall back to raw output
-	fmt.Fprintf(os.Stdout, "\n=== Decrypted Payload (raw) ===\n%s\n", plaintext)
+	_, _ = fmt.Fprintf(os.Stdout, "\n=== Decrypted Payload (raw) ===\n%s\n", plaintext)
 	return nil
 }
 
