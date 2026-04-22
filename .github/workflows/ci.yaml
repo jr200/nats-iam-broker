@@ -8,3 +8,8 @@ on:
 jobs:
   ci:
     uses: jr200-labs/github-action-templates/.github/workflows/ci_go.yaml@master
+
+  commitlint:
+    uses: jr200-labs/github-action-templates/.github/workflows/lint_commits.yaml@master
+    with:
+      runner: arc-linux-jr200-labs
