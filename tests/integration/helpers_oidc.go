@@ -20,7 +20,7 @@ import (
 type MockOIDC struct {
 	Server     *httptest.Server
 	IssuerURL  string
-	SigningKey  *rsa.PrivateKey
+	SigningKey *rsa.PrivateKey
 	KeyID      string
 	signerOpts jose.SignerOptions
 }
@@ -35,7 +35,7 @@ func SetupMockOIDC(t *testing.T) *MockOIDC {
 
 	m := &MockOIDC{
 		SigningKey: key,
-		KeyID:     "test-key-1",
+		KeyID:      "test-key-1",
 	}
 
 	mux := http.NewServeMux()

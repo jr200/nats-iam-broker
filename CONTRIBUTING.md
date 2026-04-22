@@ -16,15 +16,16 @@ Please be respectful and constructive in all interactions. We are committed to p
 
 ### Submitting Changes
 
-1. **Fork** the repository and create a branch from `main`.
+1. **Fork** the repository and create a branch from `master`.
 2. **Make your changes** — keep commits focused and well-described.
-3. **Add or update tests** for any new or changed functionality.
-4. **Run the test suite** to make sure everything passes:
+3. **Use Conventional Commit messages** — required, see below. commitlint enforces this locally and in CI.
+4. **Add or update tests** for any new or changed functionality.
+5. **Run the test suite** to make sure everything passes:
    ```bash
    make test          # unit tests
    make test-integration  # integration tests (embedded NATS + mock OIDC)
    ```
-5. **Open a Pull Request** against `main` with a clear description of your changes.
+6. **Open a Pull Request** against `master` with a clear description of your changes.
 
 ### Development Setup
 
@@ -36,6 +37,11 @@ cd nats-iam-broker
 # Install dependencies
 go mod download
 
+# Install pre-commit hooks (runs sync, golangci-lint, commitlint).
+# Requires `uv` — https://docs.astral.sh/uv/. Or `pipx install pre-commit`.
+uvx pre-commit install --install-hooks
+uvx pre-commit install --hook-type commit-msg
+
 # Run unit tests
 make test
 
@@ -45,6 +51,22 @@ make test-integration
 # Build
 make build
 ```
+
+### Commit Format
+
+Commits must follow [Conventional Commits](https://www.conventionalcommits.org/). This is enforced by `commitlint` (local pre-commit hook + CI) and drives automated version bumps via release-please.
+
+| Prefix | Effect |
+|--------|--------|
+| `feat:` | minor bump (major on 1.x with `feat!:`) |
+| `fix:` / `perf:` / `deps:` / `revert:` | patch bump |
+| `refactor:` / `test:` / `build:` | patch bump (shown in changelog) |
+| `docs:` / `chore:` / `ci:` / `style:` | no bump (hidden from changelog) |
+| `feat!:` or `BREAKING CHANGE:` footer | major bump |
+
+### Releases
+
+Releases are automated via [release-please](https://github.com/googleapis/release-please). **Do not manually tag or push `vX.Y.Z`** — a standing release PR on `master` bumps the version and changelog based on Conventional Commits. Merging that PR creates the tag, GitHub Release, and triggers the docker → helm → publish chain.
 
 ### Pull Request Guidelines
 
