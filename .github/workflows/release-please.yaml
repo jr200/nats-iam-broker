@@ -1,0 +1,52 @@
+name: release-please
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    uses: jr200-labs/github-action-templates/.github/workflows/release_please.yaml@master
+    with:
+      release-type: simple
+      target-branch: master
+      runner: arc-linux-jr200-labs
+    secrets:
+      app_private_key: ${{ secrets.INTEGRATION_APP_PRIVATE_KEY }}
+
+  # When release-please creates a tag + GitHub Release, dispatch the docker build,
+  # which in turn chains to build_helm_chart and publish_release.
+  dispatch-docker-build:
+    needs: release
+    if: needs.release.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint app token
+        id: app-token
+        uses: actions/create-github-app-token@v3.1.1
+        with:
+          client-id: ${{ vars.INTEGRATION_CLIENT_ID }}
+          private-key: ${{ secrets.INTEGRATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Dispatch docker build
+        uses: peter-evans/repository-dispatch@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          event-type: dispatch-build-docker-image
+          client-payload: |-
+            {
+              "ref": "refs/tags/${{ needs.release.outputs.tag_name }}",
+              "sha": "${{ needs.release.outputs.sha }}",
+              "tag": "${{ needs.release.outputs.tag_name }}",
+              "checkout-ref": "${{ needs.release.outputs.tag_name }}",
+              "chart_repo": "jr200/helm-charts",
+              "chart_dir": "charts",
+              "platforms": ""
+            }
