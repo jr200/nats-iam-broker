@@ -46,7 +46,7 @@ jobs:
 
   spawn-workflow:
     needs: main
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.RUNNER_PROFILES)[vars.RUNNER_PROFILE].default }}
     steps:
       - name: dispatch-next-workflow
         uses: peter-evans/repository-dispatch@v4

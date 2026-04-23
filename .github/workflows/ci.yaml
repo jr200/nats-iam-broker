@@ -12,4 +12,4 @@ jobs:
   commitlint:
     uses: jr200-labs/github-action-templates/.github/workflows/lint_commits.yaml@master
     with:
-      runner: arc-linux-jr200-labs
+      runner: ${{ fromJSON(vars.RUNNER_PROFILES)[vars.RUNNER_PROFILE].default }}
