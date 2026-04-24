@@ -5,6 +5,15 @@ on:
     branches: [master]
   workflow_dispatch:
 
+# Top-level permissions cascade into reusable workflow jobs. Repo
+# default_workflow_permissions is `read` (contents only) + `none` for
+# everything else, which downgrades the reusables' declared
+# `pull-requests: read` to `pull-requests: none` and makes the workflow
+# fail to start. Declare the union here so the reusables can run.
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   ci:
     uses: jr200-labs/github-action-templates/.github/workflows/ci_go.yaml@master
