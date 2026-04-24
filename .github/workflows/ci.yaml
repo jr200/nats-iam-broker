@@ -13,3 +13,6 @@ jobs:
     uses: jr200-labs/github-action-templates/.github/workflows/lint_commits.yaml@master
     with:
       runner: ${{ fromJSON(vars.RUNNER_PROFILES)[vars.RUNNER_PROFILE].default }}
+
+  lint-workflow-runners:
+    uses: jr200-labs/github-action-templates/.github/workflows/lint_workflow_runners.yaml@master
