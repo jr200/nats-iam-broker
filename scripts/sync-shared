@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# Sync canonical caller workflows from jr200-labs/github-action-templates
+# into a consuming repo. Reads .github/.shared-config.yaml, resolves
+# the declared groups to a flat set of workflow files, and writes
+# them verbatim to .github/workflows/.
+#
+# Usage:
+#   sync-shared              # write/update workflow files
+#   sync-shared --check      # drift-check mode: diff against on-disk, exit non-zero on diff
+#   sync-shared --bootstrap  # first-run init: also fetches this script and the drift-check
+#
+# Network failures: warn + exit 0 (don't block local commits).
+# CI sets STRICT=1 to make warnings fatal.
+
+set -uo pipefail
+
+REPO="jr200-labs/github-action-templates"
+BRANCH="${SYNC_REF:-master}"
+BASE_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/consumers"
+CONFIG=".github/.shared-config.yaml"
+WORKFLOWS_DIR=".github/workflows"
+STRICT="${STRICT:-0}"
+
+MODE="write"
+case "${1:-}" in
+    --check)     MODE="check" ;;
+    --bootstrap) MODE="bootstrap" ;;
+    "")          ;;
+    *)           echo "usage: $0 [--check|--bootstrap]" >&2; exit 2 ;;
+esac
+
+warn() { echo "sync-shared: $*" >&2; }
+die()  { echo "sync-shared: $*" >&2; exit 1; }
+
+for cmd in curl yq diff; do
+    command -v "$cmd" >/dev/null 2>&1 || {
+        warn "$cmd not found"
+        [ "$STRICT" = 1 ] && die "$cmd required in strict mode"
+        exit 0
+    }
+done
+
+[ -f "$CONFIG" ] || die "$CONFIG not found — see github-action-templates/AGENTS.md"
+
+# Fetch a remote file; return non-zero on network failure.
+fetch() {
+    local remote="$1" out="$2"
+    mkdir -p "$(dirname "$out")"
+    curl -sfL --max-time 10 "${BASE_URL}/${remote}" -o "${out}.tmp" || return 1
+    mv "${out}.tmp" "$out"
+}
+
+# Resolve groups to a deduped, sorted list of workflow names.
+resolve_workflows() {
+    local groups
+    groups=$(yq -r '.workflows[]' "$CONFIG")
+    [ -z "$groups" ] && die "$CONFIG declares no workflows: list"
+
+    local resolved=""
+    while IFS= read -r group; do
+        [ -z "$group" ] && continue
+        local group_file
+        group_file=$(mktemp)
+        if ! fetch "groups/${group}.yaml" "$group_file"; then
+            warn "fetch failed: groups/${group}.yaml"
+            rm -f "$group_file"
+            [ "$STRICT" = 1 ] && exit 1
+            continue
+        fi
+        local includes
+        includes=$(yq -r '.includes[]' "$group_file")
+        rm -f "$group_file"
+        resolved="${resolved}${includes}"$'\n'
+    done <<<"$groups"
+
+    echo "$resolved" | sort -u | grep -v '^$'
+}
+
+WORKFLOWS=$(resolve_workflows)
+[ -z "$WORKFLOWS" ] && die "no workflows resolved"
+
+case "$MODE" in
+    write|bootstrap)
+        mkdir -p "$WORKFLOWS_DIR" scripts
+        while IFS= read -r wf; do
+            if fetch "workflows/${wf}.yaml" "${WORKFLOWS_DIR}/${wf}.yaml"; then
+                echo "synced: ${wf}.yaml"
+            else
+                warn "fetch failed: workflows/${wf}.yaml"
+                [ "$STRICT" = 1 ] && exit 1
+            fi
+        done <<<"$WORKFLOWS"
+        if [ "$MODE" = "bootstrap" ]; then
+            fetch "scripts/sync-shared" "scripts/sync-shared" || warn "fetch self failed"
+            fetch "scripts/sync-shared-drift-check" "scripts/sync-shared-drift-check" || true
+            chmod +x scripts/sync-shared scripts/sync-shared-drift-check 2>/dev/null || true
+            echo "bootstrap complete. commit .github/.shared-config.yaml + .github/workflows/* + scripts/sync-shared*"
+        fi
+        ;;
+    check)
+        rc=0
+        tmpdir=$(mktemp -d)
+        trap "rm -rf $tmpdir" EXIT
+        while IFS= read -r wf; do
+            local_file="${WORKFLOWS_DIR}/${wf}.yaml"
+            remote_file="${tmpdir}/${wf}.yaml"
+            if ! fetch "workflows/${wf}.yaml" "$remote_file"; then
+                warn "fetch failed: workflows/${wf}.yaml"
+                rc=1
+                continue
+            fi
+            if [ ! -f "$local_file" ]; then
+                echo "drift: ${local_file} missing (canonical exists)"
+                rc=1
+                continue
+            fi
+            if ! diff -u "$local_file" "$remote_file" >/dev/null; then
+                echo "drift: ${local_file} differs from canonical"
+                diff -u "$local_file" "$remote_file" | head -40
+                rc=1
+            fi
+        done <<<"$WORKFLOWS"
+        # Surface unexpected on-disk workflows that aren't part of the resolved set.
+        for f in "$WORKFLOWS_DIR"/*.yaml; do
+            [ -f "$f" ] || continue
+            name=$(basename "$f" .yaml)
+            echo "$WORKFLOWS" | grep -qx "$name" || echo "stale-or-bespoke: $f (not in resolved set)"
+        done
+        exit $rc
+        ;;
+esac

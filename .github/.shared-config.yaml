@@ -1,0 +1,9 @@
+# See jr200-labs/github-action-templates/AGENTS.md for the catalogue
+# of available groups. Adding/removing entries here changes which
+# canonical caller workflows scripts/sync-shared writes into
+# .github/workflows/. Drift is enforced by drift-check (in hygiene).
+workflows:
+  - hygiene
+  - go
+  - docker
+  - release

@@ -1,9 +1,12 @@
 name: build-helm-chart
 
 on:
+  # Bespoke caller (helm-chart not yet a canonical group — JRL-32 phase 1.5).
+  # Listens on the same single release-published event the canonical
+  # release-please.yaml fires so a tag publishes docker + chart in parallel.
   repository_dispatch:
     types:
-      - dispatch-build-helm-chart
+      - release-published
 
   workflow_dispatch:
     inputs:

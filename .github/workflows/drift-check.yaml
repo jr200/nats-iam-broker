@@ -1,0 +1,21 @@
+name: drift-check
+
+# Verify on-disk caller workflows match the canonical templates in
+# jr200-labs/github-action-templates@master. Re-renders the resolved
+# set from .github/.shared-config.yaml and diffs against
+# .github/workflows/. Non-zero diff = CI red until you `sync-shared`
+# and PR the result. See AGENTS.md in github-action-templates.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift-check:
+    runs-on: ${{ fromJSON(vars.RUNNER_PROFILES)[vars.RUNNER_PROFILE].default }}
+    steps:
+      - uses: actions/checkout@v5
+      - run: ./scripts/sync-shared-drift-check
