@@ -25,3 +25,6 @@ jobs:
 
   lint-workflow-runners:
     uses: jr200-labs/github-action-templates/.github/workflows/lint_workflow_runners.yaml@master
+
+  lint-pr-metadata:
+    uses: jr200-labs/github-action-templates/.github/workflows/lint_pr_metadata.yaml@master
