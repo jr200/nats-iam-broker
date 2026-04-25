@@ -1,0 +1,13 @@
+name: lint-pr-metadata
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  lint-pr-metadata:
+    uses: jr200-labs/github-action-templates/.github/workflows/lint_pr_metadata.yaml@master

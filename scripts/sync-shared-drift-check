@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Thin wrapper that runs sync-shared in --check mode with STRICT=1 so
+# CI fails on any drift or fetch error. Drift-check.yaml in the
+# hygiene group runs this script on every PR.
+set -euo pipefail
+exec "$(dirname "$0")/sync-shared" --check
