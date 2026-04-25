@@ -24,6 +24,10 @@ on:
         default: |-
           [ "linux/amd64" ]
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   configure:
     uses: jr200-labs/github-action-templates/.github/workflows/preconfigure.yaml@master
