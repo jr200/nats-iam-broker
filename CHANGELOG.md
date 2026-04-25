@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/jr200-labs/nats-iam-broker/compare/v1.4.0...v1.4.1) (2026-04-25)
+
+
+### Bug Fixes
+
+* **ci:** add top-level permissions for build_docker_image (JRL-32) ([#38](https://github.com/jr200-labs/nats-iam-broker/issues/38)) ([7e590c1](https://github.com/jr200-labs/nats-iam-broker/commit/7e590c1944a0eb8d50d2f270b27e912aefea27e2))
+
 ## [1.4.0](https://github.com/jr200-labs/nats-iam-broker/compare/v1.3.2...v1.4.0) (2026-04-22)
 
 
