@@ -6,4 +6,5 @@ workflows:
   - hygiene
   - go
   - docker
+  - helm-chart
   - release
