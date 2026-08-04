@@ -10,7 +10,7 @@ require (
 	github.com/go-playground/validator v9.31.0+incompatible
 	github.com/goccy/go-yaml v1.19.2
 	github.com/nats-io/jwt/v2 v2.8.2
-	github.com/nats-io/nats-server/v2 v2.14.3
+	github.com/nats-io/nats-server/v2 v2.14.4
 	github.com/nats-io/nats.go v1.52.0
 	github.com/nats-io/nkeys v0.4.16
 	github.com/prometheus/client_golang v1.24.1
@@ -32,7 +32,7 @@ require (
 )
 
 require (
-	github.com/antithesishq/antithesis-sdk-go v0.7.0 // indirect
+	github.com/antithesishq/antithesis-sdk-go v0.7.2-default-no-op // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
