@@ -302,7 +302,10 @@ case "$MODE" in
             if [[ "$name" == bespoke_* ]]; then
                 continue
             fi
-            echo "$WORKFLOWS" | grep -qx "$name" || echo "stale-or-bespoke: $f (not in resolved set)"
+            if ! echo "$WORKFLOWS" | grep -qx "$name"; then
+                echo "unexpected workflow: $f (not in resolved set; rename to bespoke_*.yaml or remove)"
+                rc=1
+            fi
         done
         exit $rc
         ;;
