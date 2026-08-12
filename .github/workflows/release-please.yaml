@@ -17,6 +17,10 @@ on:
           - self-hosted
           - github-hosted
 
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
+
 # Only the caller's TOP-LEVEL permissions cascade into reusable
 # workflows. Both writes are needed: contents to push tags + create
 # the GitHub Release, pull-requests to raise the Release PR.
