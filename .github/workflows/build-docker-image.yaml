@@ -128,7 +128,7 @@ jobs:
       registry_name: ghcr.io
       image_name: ${{ github.repository_owner }}/${{ matrix.name }}
       dockerfile: ${{ matrix.dockerfile }}
-      context: ${{ matrix.context || '' }}
+      context: ${{ matrix.context || '.' }}
       build-contexts: ${{ matrix.build_contexts || '' }}
       build-args: ${{ github.event.inputs.build-args || '' }}
       tag: ${{ fromJson(needs.configure.outputs.context).tag }}
