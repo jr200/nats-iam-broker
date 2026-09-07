@@ -45,6 +45,10 @@ jobs:
   dispatch-release-published:
     needs: release
     if: needs.release.outputs.release_created == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ${{ fromJSON(needs.release.outputs.releases) }}
     runs-on: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'self-hosted' && 'self-hosted' || github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'github-hosted' && 'ubuntu-latest' || fromJSON(vars.RUNNER_PROFILES)[vars.RUNNER_PROFILE].default }}
     steps:
       - name: Mint app token
@@ -61,8 +65,34 @@ jobs:
           event-type: release-published
           client-payload: |-
             {
-              "ref": "refs/tags/${{ needs.release.outputs.tag_name }}",
-              "sha": "${{ needs.release.outputs.sha }}",
-              "tag": "${{ needs.release.outputs.tag_name }}",
-              "checkout-ref": "${{ needs.release.outputs.tag_name }}"
+              "ref": "refs/tags/${{ matrix.release.tag_name }}",
+              "sha": "${{ matrix.release.sha }}",
+              "tag": "v${{ matrix.release.version }}",
+              "release-tag": "${{ matrix.release.tag_name }}",
+              "component": "${{ matrix.release.component }}",
+              "path": "${{ matrix.release.path }}",
+              "checkout-ref": "${{ matrix.release.tag_name }}"
             }
+
+  # Go modules are published by their release tag, so they do not have a
+  # separate registry-publish workflow to provide the completion signal.
+  # Repositories opt in with publisher: release entries in artifacts.yaml.
+  notify-renovate-for-release-artifacts:
+    needs: release
+    if: needs.release.outputs.release_created == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ${{ fromJSON(needs.release.outputs.releases) }}
+    uses: jr200-labs/github-action-templates/.github/workflows/notify_artifact_published.yaml@master
+    with:
+      checkout-ref: ${{ matrix.release.tag_name }}
+      publisher: release
+      component: ${{ matrix.release.component }}
+      version: v${{ matrix.release.version }}
+      source-sha: ${{ matrix.release.sha }}
+      dispatch-client-id: ${{ vars.RENOVATE_DISPATCH_CLIENT_ID || vars.INTEGRATION_CLIENT_ID }}
+      runner: ${{ fromJSON(vars.RUNNER_PROFILES)[vars.RUNNER_PROFILE].default }}
+    secrets:
+      dispatch_app_private_key: ${{ secrets.RENOVATE_DISPATCH_APP_PRIVATE_KEY }}
+      integration_app_private_key: ${{ secrets.INTEGRATION_APP_PRIVATE_KEY }}

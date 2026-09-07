@@ -1,6 +1,7 @@
 # GENERATED/SHARED WORKFLOW: copied into consuming repos by sync-shared.
 # Do not edit in consuming repos; change jr200-labs/github-action-templates and sync.
 name: build-docker-image
+run-name: ${{ github.event.client_payload['release-tag'] || format('{0} by @{1}', github.event_name, github.actor) }}
 
 # Triggered by `release-published` repository_dispatch from
 # release-please.yaml when a tag is cut, or manually via
@@ -15,6 +16,8 @@ name: build-docker-image
 #   dockerfile: <path to Dockerfile, relative to repo root>
 #   context: <optional, default repo root — set when COPY/ADD
 #            paths are relative to a subdirectory>
+#   component: <optional release-please component; release events build only matching images>
+#   success-tag-prefix: <optional Git tag prefix written after the image manifest succeeds>
 #
 #   images:
 #     - name: agent-base
@@ -107,10 +110,25 @@ jobs:
       - id: gen
         env:
           REPO_NAME: ${{ github.event.repository.name }}
+          RELEASE_COMPONENT: ${{ fromJson(needs.configure.outputs.context).component || '' }}
         run: |
           set -euo pipefail
           if [ -f .github/images.yaml ]; then
-            MATRIX=$(yq -o=json -I=0 '{"include": .images}' .github/images.yaml)
+            # Release Please uses "." as the component for a root package with
+            # no explicit component name. That is the repository-wide release
+            # sentinel, so build every declared image rather than filtering for
+            # an image whose component is literally ".".
+            if [ -n "$RELEASE_COMPONENT" ] && [ "$RELEASE_COMPONENT" != "." ]; then
+              MATRIX=$(RELEASE_COMPONENT="$RELEASE_COMPONENT" yq -o=json -I=0 \
+                '{"include": [.images[] | select(.component == strenv(RELEASE_COMPONENT))]}' \
+                .github/images.yaml)
+              if [ "$(jq '.include | length' <<<"$MATRIX")" -eq 0 ]; then
+                echo "::error title=Release component has no image::No image declares component '$RELEASE_COMPONENT' in .github/images.yaml"
+                exit 1
+              fi
+            else
+              MATRIX=$(yq -o=json -I=0 '{"include": .images}' .github/images.yaml)
+            fi
           else
             MATRIX=$(jq -nc --arg name "$REPO_NAME" '{include: [{name: $name, dockerfile: ""}]}')
           fi
@@ -133,6 +151,7 @@ jobs:
       build-args: ${{ github.event.inputs.build-args || '' }}
       tag: ${{ fromJson(needs.configure.outputs.context).tag }}
       source-sha: ${{ fromJson(needs.configure.outputs.context).sha || '' }}
+      success-tag-prefix: ${{ matrix.success-tag-prefix || '' }}
       platforms: ${{ fromJson(needs.configure.outputs.context).platforms || vars.DOCKER_IMAGE_PLATFORMS || '' }}
       runner: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'self-hosted' && 'self-hosted' || github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'github-hosted' && 'ubuntu-latest' || fromJSON(vars.RUNNER_PROFILES)[vars.RUNNER_PROFILE].default }}
     secrets:
@@ -153,3 +172,19 @@ jobs:
       # can ignore the secret.
       build_secrets: |
         ghcr_token=${{ secrets.GITHUB_TOKEN }}
+
+  notify-renovate:
+    needs: [configure, main]
+    if: github.event_name == 'repository_dispatch'
+    uses: jr200-labs/github-action-templates/.github/workflows/notify_artifact_published.yaml@master
+    with:
+      checkout-ref: ${{ fromJson(needs.configure.outputs.context).checkout-ref }}
+      publisher: docker
+      component: ${{ fromJson(needs.configure.outputs.context).component || '.' }}
+      version: ${{ fromJson(needs.configure.outputs.context).tag }}
+      source-sha: ${{ fromJson(needs.configure.outputs.context).sha || '' }}
+      dispatch-client-id: ${{ vars.RENOVATE_DISPATCH_CLIENT_ID || vars.INTEGRATION_CLIENT_ID }}
+      runner: ${{ fromJSON(vars.RUNNER_PROFILES)[vars.RUNNER_PROFILE].default }}
+    secrets:
+      dispatch_app_private_key: ${{ secrets.RENOVATE_DISPATCH_APP_PRIVATE_KEY }}
+      integration_app_private_key: ${{ secrets.INTEGRATION_APP_PRIVATE_KEY }}

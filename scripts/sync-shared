@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Sync canonical caller workflows from jr200-labs/github-action-templates
 # into a consuming repo. Reads .github/.shared-config.yaml, resolves
-# the declared groups to a flat set of workflow files, and writes
-# them verbatim to .github/workflows/.
+# the declared groups to workflow and supporting-file sets, and writes
+# canonical copies into the consuming repository.
 #
 # Usage:
 #   sync-shared              # write/update workflow files
 #   sync-shared --check      # drift-check mode: diff against on-disk, exit non-zero on diff
 #   sync-shared --bootstrap  # first-run init: also fetches this script and the drift-check
+#   sync-shared --list-supporting-files  # print group-managed repository paths
 #
 # `.github/.shared-config.yaml` may pin `ref: shared-vX.Y.Z`; SYNC_REF
 # overrides that pin for diagnostics.
@@ -33,8 +34,9 @@ MODE="write"
 case "${1:-}" in
     --check)     MODE="check" ;;
     --bootstrap) MODE="bootstrap" ;;
+    --list-supporting-files) MODE="list-supporting-files" ;;
     "")          ;;
-    *)           echo "usage: $0 [--check|--bootstrap]" >&2; exit 2 ;;
+    *)           echo "usage: $0 [--check|--bootstrap|--list-supporting-files]" >&2; exit 2 ;;
 esac
 
 warn() { echo "sync-shared: $*" >&2; }
@@ -213,6 +215,48 @@ resolve_workflows() {
 WORKFLOWS=$(resolve_workflows)
 [ -z "$WORKFLOWS" ] && die "no workflows resolved"
 
+# Resolve optional repository-relative supporting files declared by groups.
+resolve_files() {
+    local groups
+    groups=$(yq -r '.workflows[]' "$CONFIG")
+
+    local resolved=""
+    while IFS= read -r group; do
+        [ -z "$group" ] && continue
+        local group_file
+        group_file=$(mktemp)
+        if ! fetch "groups/${group}.yaml" "$group_file"; then
+            warn "fetch failed: groups/${group}.yaml"
+            rm -f "$group_file"
+            [ "$STRICT" = 1 ] && exit 1
+            continue
+        fi
+        local files
+        files=$(yq -r '.files[]?' "$group_file")
+        rm -f "$group_file"
+        resolved="${resolved}${files}"$'\n'
+    done <<<"$groups"
+
+    echo "$resolved" | sort -u | grep -v '^$'
+}
+
+FILES=$(resolve_files)
+
+validate_file_path() {
+    case "$1" in
+        ""|/*|..|../*|*/..|*/../*) die "invalid group file path: $1" ;;
+    esac
+}
+
+if [ "$MODE" = "list-supporting-files" ]; then
+    while IFS= read -r file; do
+        [ -z "$file" ] && continue
+        validate_file_path "$file"
+        echo "$file"
+    done <<<"$FILES"
+    exit 0
+fi
+
 case "$MODE" in
     write|bootstrap)
         mkdir -p "$WORKFLOWS_DIR" scripts
@@ -224,6 +268,17 @@ case "$MODE" in
                 [ "$STRICT" = 1 ] && exit 1
             fi
         done <<<"$WORKFLOWS"
+        while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            validate_file_path "$file"
+            if fetch "files/${file}" "$file"; then
+                [[ "$file" == scripts/* ]] && chmod +x "$file"
+                echo "synced: ${file}"
+            else
+                warn "fetch failed: files/${file}"
+                [ "$STRICT" = 1 ] && exit 1
+            fi
+        done <<<"$FILES"
         for common_file in "${COMMON_FILES[@]}"; do
             if fetch_shared "$common_file" "$common_file"; then
                 echo "synced: ${common_file}"
@@ -268,6 +323,27 @@ case "$MODE" in
                 rc=1
             fi
         done <<<"$WORKFLOWS"
+        while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            validate_file_path "$file"
+            local_file="$file"
+            remote_file="${tmpdir}/files/${file}"
+            if ! fetch "files/${file}" "$remote_file"; then
+                warn "fetch failed: files/${file}"
+                rc=1
+                continue
+            fi
+            if [ ! -f "$local_file" ]; then
+                echo "drift: ${local_file} missing (canonical exists)"
+                rc=1
+                continue
+            fi
+            if ! diff -u "$local_file" "$remote_file" >/dev/null; then
+                echo "drift: ${local_file} differs from canonical"
+                diff -u "$local_file" "$remote_file" | head -40
+                rc=1
+            fi
+        done <<<"$FILES"
         for common_file in "${COMMON_FILES[@]}"; do
             local_file="$common_file"
             remote_file="${tmpdir}/shared/${common_file}"
