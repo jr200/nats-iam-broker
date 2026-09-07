@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.4](https://github.com/jr200-labs/nats-iam-broker/compare/v1.7.3...v1.7.4) (2026-09-07)
+
+
+### Bug Fixes
+
+* **ci:** align Docker builder with Go module ([#111](https://github.com/jr200-labs/nats-iam-broker/issues/111)) ([8f5b3d3](https://github.com/jr200-labs/nats-iam-broker/commit/8f5b3d329c741534e3f8b021ff5566aa76003e9e))
+
 ## [1.7.3](https://github.com/jr200-labs/nats-iam-broker/compare/v1.7.2...v1.7.3) (2026-09-07)
 
 
