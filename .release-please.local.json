@@ -1,3 +1,6 @@
 {
-  "release-type": "python"
+  "release-type": "python",
+  "separate-pull-requests": true,
+  "group-pull-request-title-pattern": "chore${scope}: release${component} ${version}",
+  "pull-request-title-pattern": "chore${scope}: release${component} ${version}"
 }
