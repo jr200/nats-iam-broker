@@ -167,6 +167,64 @@ rbac:
 	})
 }
 
+func TestConfigManager_ClaimValuesCannotInjectYAML(t *testing.T) {
+	config := `
+params:
+  left_delim: "{{"
+  right_delim: "}}"
+nats:
+  url: "nats://localhost:4222"
+service:
+  name: "test-service"
+  description: "Test Service"
+  version: "1.0.0"
+  creds_file: "/path/to/creds"
+  account:
+    name: "test"
+    signing_nkey: "SUAGJBPRRXFQL2DXLG4CXW5D6XTLJ4DDMMKHNCIAPNK2Y4IZFHTJM6HN"
+idp:
+  - description: "Test IDP"
+    issuer_url: "https://test.idp"
+    client_id: "test-client"
+rbac:
+  user_accounts:
+    - name: "test-account"
+      public_key: "test-key"
+      signing_nkey: "SUAGJBPRRXFQL2DXLG4CXW5D6XTLJ4DDMMKHNCIAPNK2Y4IZFHTJM6HN"
+  role_binding:
+    - user_account: "test-account"
+      roles: ["test-role"]
+      match:
+        - claim: "preferred_username"
+          value: "{{.preferred_username}}"
+  roles:
+    - name: "test-role"
+      permissions:
+        pub:
+          allow:
+            - basic.{{.preferred_username}}
+`
+
+	configFile, err := os.CreateTemp("", "yaml-injection-*.yaml")
+	require.NoError(t, err)
+	defer func() { _ = os.Remove(configFile.Name()) }()
+	_, err = configFile.WriteString(config)
+	require.NoError(t, err)
+	require.NoError(t, configFile.Close())
+
+	cm, err := NewConfigManager([]string{configFile.Name()})
+	require.NoError(t, err)
+
+	injectedClaim := "cryptoadmin\n        - admin.>"
+	cfg, err := cm.GetConfig(map[string]interface{}{"preferred_username": injectedClaim})
+	require.NoError(t, err)
+
+	require.Len(t, cfg.Rbac.Roles, 1)
+	require.Len(t, cfg.Rbac.Roles[0].Permissions.Pub.Allow, 1)
+	assert.Equal(t, "basic."+injectedClaim, cfg.Rbac.Roles[0].Permissions.Pub.Allow[0])
+	assert.NotContains(t, cfg.Rbac.Roles[0].Permissions.Pub.Allow, "admin.>")
+}
+
 func TestConfigParsePhase_Atomic(t *testing.T) {
 	t.Run("initial phase is render", func(t *testing.T) {
 		assert.Equal(t, configPhaseRender, getConfigParsePhase())

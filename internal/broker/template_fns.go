@@ -10,6 +10,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/goccy/go-yaml"
 	"go.uber.org/zap"
 )
 
@@ -155,6 +156,62 @@ func (tc *templateCache) renderAll(content string, mappings map[string]interface
 	}
 
 	return result
+}
+
+// renderYAML renders templates within YAML scalar values while preserving the
+// document's existing structure. Rendering the serialized YAML directly would
+// allow a template value containing YAML syntax to create new mappings or list
+// items when the result is parsed again.
+func (tc *templateCache) renderYAML(content string, mappings map[string]interface{}) (string, error) {
+	var document map[string]interface{}
+	if err := yaml.Unmarshal([]byte(content), &document); err != nil {
+		return "", fmt.Errorf("error parsing YAML before template rendering: %w", err)
+	}
+
+	rendered, err := tc.renderYAMLValue(document, mappings)
+	if err != nil {
+		return "", err
+	}
+
+	encoded, err := yaml.Marshal(rendered)
+	if err != nil {
+		return "", fmt.Errorf("error encoding YAML after template rendering: %w", err)
+	}
+	return string(encoded), nil
+}
+
+func (tc *templateCache) renderYAMLValue(value interface{}, mappings map[string]interface{}) (interface{}, error) {
+	switch typed := value.(type) {
+	case string:
+		return tc.renderAll(typed, mappings), nil
+	case []interface{}:
+		result := make([]interface{}, len(typed))
+		for i, item := range typed {
+			rendered, err := tc.renderYAMLValue(item, mappings)
+			if err != nil {
+				return nil, err
+			}
+			result[i] = rendered
+		}
+		return result, nil
+	case map[string]interface{}:
+		result := make(map[string]interface{}, len(typed))
+		for key, item := range typed {
+			renderedKey := tc.renderAll(key, mappings)
+			if _, exists := result[renderedKey]; exists {
+				return nil, fmt.Errorf("template rendering produced duplicate YAML key %q", renderedKey)
+			}
+
+			rendered, err := tc.renderYAMLValue(item, mappings)
+			if err != nil {
+				return nil, err
+			}
+			result[renderedKey] = rendered
+		}
+		return result, nil
+	default:
+		return value, nil
+	}
 }
 
 // executeTemplate runs a pre-compiled template with the given context.
