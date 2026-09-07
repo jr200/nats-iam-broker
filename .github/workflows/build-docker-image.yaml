@@ -132,6 +132,7 @@ jobs:
       build-contexts: ${{ matrix.build_contexts || '' }}
       build-args: ${{ github.event.inputs.build-args || '' }}
       tag: ${{ fromJson(needs.configure.outputs.context).tag }}
+      source-sha: ${{ fromJson(needs.configure.outputs.context).sha || '' }}
       platforms: ${{ fromJson(needs.configure.outputs.context).platforms || vars.DOCKER_IMAGE_PLATFORMS || '' }}
       runner: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'self-hosted' && 'self-hosted' || github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'github-hosted' && 'ubuntu-latest' || fromJSON(vars.RUNNER_PROFILES)[vars.RUNNER_PROFILE].default }}
     secrets:
