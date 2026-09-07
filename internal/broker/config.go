@@ -211,8 +211,12 @@ func (cm *ConfigManager) GetConfig(mappings map[string]interface{}) (*Config, er
 	// Create a new config instance starting with the base config
 	cfg := cm.baseConfig
 
-	// Render templates with provided mappings using pre-compiled templates
-	renderedYAML := cm.templateCache.renderAll(cm.mergedYAML, mappings)
+	// Render templates only within parsed scalar values so rendered data cannot
+	// alter the YAML document structure.
+	renderedYAML, err := cm.templateCache.renderYAML(cm.mergedYAML, mappings)
+	if err != nil {
+		return nil, err
+	}
 
 	// Create a temporary config to hold rendered values
 	var tempCfg Config
