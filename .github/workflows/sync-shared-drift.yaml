@@ -90,6 +90,7 @@ jobs:
           pr_json="$(gh pr view "${PR_NUMBER}" --json title,headRefName,files)"
           title="$(jq -r '.title' <<<"${pr_json}")"
           branch="$(jq -r '.headRefName' <<<"${pr_json}")"
+          managed_files="$(./scripts/sync-shared --list-supporting-files)"
 
           if [ "${title}" != "chore: sync shared workflows" ] || [ "${branch}" != "chore/sync-shared-workflows" ]; then
             echo "Refusing auto-merge for unexpected PR ${PR_NUMBER}: ${branch} / ${title}" >&2
@@ -101,8 +102,10 @@ jobs:
               .github/workflows/*.yaml|.github/workflows/*.yml|.githooks/commit-msg|.githooks/lint-message-text.sh|cog.toml|scripts/sync-shared|scripts/sync-shared-drift-check|package.json)
                 ;;
               *)
-                echo "Refusing auto-merge for unexpected sync-shared path: ${path}" >&2
-                exit 1
+                if ! grep -Fxq "${path}" <<<"${managed_files}"; then
+                  echo "Refusing auto-merge for unexpected sync-shared path: ${path}" >&2
+                  exit 1
+                fi
                 ;;
             esac
           done

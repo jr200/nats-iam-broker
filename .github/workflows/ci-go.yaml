@@ -4,6 +4,10 @@ name: ci-go
 
 on:
   pull_request:
+  # Seed setup-go's default-branch cache so pull-request branches can restore
+  # it. GitHub cache scope prevents one feature branch from warming another.
+  push:
+    branches: [master]
   workflow_dispatch:
     inputs:
       runner:

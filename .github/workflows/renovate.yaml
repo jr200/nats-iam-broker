@@ -30,13 +30,15 @@ on:
 # Only the caller's TOP-LEVEL permissions cascade into reusable
 # workflows. The reusable's renovate job needs contents/issues/PR
 # writes for repo state + actions:read for its post-step that fetches
-# the job log to detect package-lookup failures. See AGENTS.md.
+# the job log to detect package-lookup failures + packages:read so Renovate
+# can authenticate private GHCR lookups as this repository. See AGENTS.md.
 permissions:
   contents: write
   issues: write
   pull-requests: write
   statuses: write
   actions: read
+  packages: read
 
 jobs:
   renovate:

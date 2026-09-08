@@ -1,6 +1,7 @@
 # GENERATED/SHARED WORKFLOW: copied into consuming repos by sync-shared.
 # Do not edit in consuming repos; change jr200-labs/github-action-templates and sync.
 name: build-helm-chart
+run-name: ${{ github.event.client_payload['release-tag'] || format('{0} by @{1}', github.event_name, github.actor) }}
 
 # Triggered by release-please publishing a tag. Builds + uploads a
 # Helm chart to the org's chart repo. Verbatim across consumers; each
@@ -53,3 +54,19 @@ jobs:
       runner: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'self-hosted' && 'self-hosted' || github.event_name == 'workflow_dispatch' && github.event.inputs.runner == 'github-hosted' && 'ubuntu-latest' || fromJSON(vars.RUNNER_PROFILES)[vars.RUNNER_PROFILE].default }}
     secrets:
       charts_write_token: ${{ secrets.CHARTS_WRITE_TOKEN }}
+
+  notify-renovate:
+    needs: [configure, main]
+    if: github.event_name == 'repository_dispatch'
+    uses: jr200-labs/github-action-templates/.github/workflows/notify_artifact_published.yaml@master
+    with:
+      checkout-ref: ${{ fromJson(needs.configure.outputs.context).checkout-ref }}
+      publisher: helm
+      component: ${{ fromJson(needs.configure.outputs.context).component || '.' }}
+      version: ${{ fromJson(needs.configure.outputs.context).tag }}
+      source-sha: ${{ fromJson(needs.configure.outputs.context).sha || '' }}
+      dispatch-client-id: ${{ vars.RENOVATE_DISPATCH_CLIENT_ID || vars.INTEGRATION_CLIENT_ID }}
+      runner: ${{ fromJSON(vars.RUNNER_PROFILES)[vars.RUNNER_PROFILE].default }}
+    secrets:
+      dispatch_app_private_key: ${{ secrets.RENOVATE_DISPATCH_APP_PRIVATE_KEY }}
+      integration_app_private_key: ${{ secrets.INTEGRATION_APP_PRIVATE_KEY }}
